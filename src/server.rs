@@ -8,11 +8,22 @@ use axum::Router;
 use axum_server::Server;
 use reqwest;
 use std::convert::TryFrom;
+use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
 pub async fn start_server(config: crate::config::Config) {
+    // Check for BOUNCER_TOKEN environment variable
+    let bouncer_token = match env::var("BOUNCER_TOKEN") {
+        Ok(token) => token,
+        Err(_) => {
+            tracing::warn!("BOUNCER_TOKEN environment variable not set. This may make your target API vulnerable to impersonation.");
+            tracing::warn!("Using insecure default token 'secret'. Please set BOUNCER_TOKEN in production.");
+            "secret".to_string()
+        }
+    };
+
     // Create policy registry and register all available policies
     let mut registry = PolicyRegistry::new();
 
@@ -48,26 +59,14 @@ pub async fn start_server(config: crate::config::Config) {
 
     // Create Axum router with middleware for policies
     let app = Router::new()
-        // Match root path explicitly
-        .route("/", {
-            let client_clone = client.clone();
-            let config_clone = Arc::clone(&config_for_handler);
+        .route(
+            "/{*path}",
             axum::routing::any(move |req| {
-                let client = client_clone.clone();
-                let config = config_clone.clone();
-                async move { handler(req, client, config).await }
-            })
-        })
-        // Match all other paths with wildcard - this correctly captures nested paths
-        .route("/*path", {
-            let client_clone = client.clone();
-            let config_clone = Arc::clone(&config_for_handler);
-            axum::routing::any(move |req| {
-                let client = client_clone.clone();
-                let config = config_clone.clone();
-                async move { handler(req, client, config).await }
-            })
-        })
+                // Clone the token for use in the handler
+                let token = bouncer_token.clone();
+                handler(req, client.clone(), config_for_handler.clone(), token)
+            }),
+        )
         .layer(policy_chain.into_layer());
 
     // Start the HTTP server
@@ -89,6 +88,7 @@ async fn handler(
     req: Request<Body>,
     client: reqwest::Client,
     config: Arc<crate::config::Config>,
+    bouncer_token: String,
 ) -> Response<Body> {
     // Check if destination is configured
     if let Some(destination) = &config.server.destination_address {
@@ -97,6 +97,8 @@ async fn handler(
         let uri = req.uri();
         let path = uri.path();
         let query = uri.query().unwrap_or("");
+
+        tracing::info!("Original request path: {}", path);
 
         // Construct the destination URL
         let url = {
@@ -115,14 +117,27 @@ async fn handler(
             }
         };
 
-        // Extract headers and body from the request
+        tracing::info!("Forwarding to URL: {}", url);
+
+        // Extract headers and body from the request, filtering out bouncer-* headers
         let mut headers = reqwest::header::HeaderMap::new();
         for (name, value) in req.headers() {
+            // Skip any header starting with 'bouncer' (case/whitespace insensitive)
+            let header_str = name.as_str().to_lowercase();
+            if header_str.starts_with("bouncer") {
+                continue;
+            }
+
             if let Ok(header_name) = reqwest::header::HeaderName::try_from(name.as_str()) {
                 if let Ok(header_value) = reqwest::header::HeaderValue::try_from(value.as_bytes()) {
                     headers.insert(header_name, header_value);
                 }
             }
+        }
+
+        // Add bouncer-token header with our token
+        if let Ok(token_value) = reqwest::header::HeaderValue::try_from(bouncer_token.as_bytes()) {
+            headers.insert("bouncer-token", token_value);
         }
 
         // Convert the request body using axum's collect method

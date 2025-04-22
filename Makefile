@@ -5,10 +5,10 @@ build:
 	cargo build --release
 
 run:
-	cargo run --release
+	env $(shell cat .env) cargo run --release -- --config examples/default/bouncer.config.yaml
 
 dev:
-	cargo build --release && cargo run --release -- --config examples/default/bouncer.config.yaml
+	make build && make run
 
 fix:
 	cargo fmt
