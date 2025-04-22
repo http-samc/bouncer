@@ -2,6 +2,7 @@ use axum::Router;
 use axum_server::Server;
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;
+use crate::get_custom_policies;
 use crate::policy::providers::bouncer::auth::bearer::BearerAuthPolicyFactory;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -11,9 +12,13 @@ pub async fn start_server(config: crate::config::Config) {
     let mut registry = PolicyRegistry::new();
 
     // Register built-in policies
-    register_policies(&mut registry);
+    register_builtin_policies(&mut registry);
+
+    // Register user-provided custom policies
+    register_custom_policies(&mut registry);
 
     // Load external policies from plugins directory if it exists
+    // This is kept for backward compatibility
     let plugins_dir = Path::new("plugins");
     if plugins_dir.exists() && plugins_dir.is_dir() {
         match registry.load_policies_from_directory(plugins_dir) {
@@ -47,7 +52,16 @@ async fn handler() -> &'static str {
     "Hello from Bouncer!"
 }
 
-// Function to register all available policies
-fn register_policies(registry: &mut PolicyRegistry) {
+// Function to register built-in policies
+fn register_builtin_policies(registry: &mut PolicyRegistry) {
     registry.register_policy::<BearerAuthPolicyFactory>();
+}
+
+// Function to register user-provided custom policies
+#[allow(clippy::needless_borrow)]
+fn register_custom_policies(registry: &mut PolicyRegistry) {
+    // Use a fully qualified path rather than an import
+    for register_fn in get_custom_policies() {
+        register_fn(registry);
+    }
 }

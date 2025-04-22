@@ -1,8 +1,5 @@
-mod config;
-mod server;
-mod policy;
-
 use clap::Parser;
+use bouncer::start_with_config;
 
 #[derive(Parser)]
 struct Args {
@@ -18,15 +15,6 @@ async fn main() {
     // Parse command line arguments
     let args = Args::parse();
 
-    // Load configuration file
-    let config = match config::load_config(&args.config) {
-        Ok(config) => config,
-        Err(e) => {
-            eprintln!("Failed to load configuration: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Start the server with loaded configuration
-    server::start_server(config).await;
+    // Start the server with the config file
+    start_with_config(&args.config).await;
 }
