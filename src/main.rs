@@ -1,5 +1,5 @@
-use clap::Parser;
 use bouncer::start_with_config;
+use clap::Parser;
 
 #[derive(Parser)]
 struct Args {

@@ -1,9 +1,9 @@
 use crate::policy::traits::{Policy, PolicyFactory, PolicyResult};
+use async_trait::async_trait;
 use axum::{
     body::Body,
-    http::{Request, Response, StatusCode, header},
+    http::{header, Request, Response, StatusCode},
 };
-use async_trait::async_trait;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -49,10 +49,15 @@ impl Policy for BearerAuthPolicy {
                 return PolicyResult::Terminate(
                     Response::builder()
                         .status(StatusCode::UNAUTHORIZED)
-                        .header(header::WWW_AUTHENTICATE, format!("Bearer realm=\"{}\"", 
-                            self.config.realm.as_deref().unwrap_or("api")))
+                        .header(
+                            header::WWW_AUTHENTICATE,
+                            format!(
+                                "Bearer realm=\"{}\"",
+                                self.config.realm.as_deref().unwrap_or("api")
+                            ),
+                        )
                         .body(Body::from("Unauthorized: Bearer token required"))
-                        .unwrap()
+                        .unwrap(),
                 );
             }
         };
@@ -65,7 +70,7 @@ impl Policy for BearerAuthPolicy {
                     Response::builder()
                         .status(StatusCode::UNAUTHORIZED)
                         .body(Body::from("Invalid Authorization header format"))
-                        .unwrap()
+                        .unwrap(),
                 );
             }
         };
@@ -82,10 +87,15 @@ impl Policy for BearerAuthPolicy {
         PolicyResult::Terminate(
             Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
-                .header(header::WWW_AUTHENTICATE, format!("Bearer realm=\"{}\"", 
-                    self.config.realm.as_deref().unwrap_or("api")))
+                .header(
+                    header::WWW_AUTHENTICATE,
+                    format!(
+                        "Bearer realm=\"{}\"",
+                        self.config.realm.as_deref().unwrap_or("api")
+                    ),
+                )
                 .body(Body::from("Unauthorized: Invalid Bearer token"))
-                .unwrap()
+                .unwrap(),
         )
     }
 }

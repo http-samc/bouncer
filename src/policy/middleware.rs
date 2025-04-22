@@ -1,12 +1,12 @@
-use std::task::{Context, Poll};
-use std::sync::Arc;
+use crate::policy::traits::{Policy, PolicyResult};
 use axum::{
     body::Body,
     http::{Request, Response},
 };
 use futures::future::BoxFuture;
-use tower::{Service, Layer};
-use crate::policy::traits::{Policy, PolicyResult};
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use tower::{Layer, Service};
 
 // Our middleware layer
 #[derive(Clone)]
@@ -16,7 +16,9 @@ pub struct PolicyLayer {
 
 impl PolicyLayer {
     pub fn new(policies: Vec<Box<dyn Policy>>) -> Self {
-        Self { policies: Arc::new(policies) }
+        Self {
+            policies: Arc::new(policies),
+        }
     }
 }
 

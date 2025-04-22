@@ -1,5 +1,5 @@
-use serde::{Deserialize};
-use std::{fs, path::Path, collections::HashMap};
+use serde::Deserialize;
+use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Deserialize)]
 pub struct PolicyConfig {
@@ -24,6 +24,10 @@ pub struct ServerConfig {
     pub bind_address: String,
     #[serde(default = "default_port")]
     pub port: u16,
+    /// Optional destination address to forward requests to after middleware processing.
+    /// Can be a full URL like "http://api.example.com" or a local address like "http://localhost:3000"
+    #[serde(default)]
+    pub destination_address: Option<String>,
 }
 
 fn default_bind_address() -> String {
@@ -59,10 +63,11 @@ impl Config {
 
 pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-    let mut config: Config = serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
-    
+    let mut config: Config =
+        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+
     // Process the policy configs to generate the policies array
     config.process_policy_configs();
-    
+
     Ok(config)
 }

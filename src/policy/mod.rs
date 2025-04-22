@@ -1,8 +1,8 @@
-pub mod traits;
-pub mod registry;
+pub mod macros;
 pub mod middleware;
 pub mod providers;
-pub mod macros;
+pub mod registry;
+pub mod traits;
 
 pub use middleware::PolicyChainExt;
 pub use traits::Policy;

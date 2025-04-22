@@ -30,13 +30,15 @@ macro_rules! register_policy {
         // For backward compatibility with plugin system
         #[doc(hidden)]
         #[no_mangle]
-        pub extern "C" fn __bouncer_register_policy(registry: &mut $crate::policy::registry::PolicyRegistry) {
+        pub extern "C" fn __bouncer_register_policy(
+            registry: &mut $crate::policy::registry::PolicyRegistry,
+        ) {
             registry.register_policy::<$policy_type>();
         }
-        
+
         // For the new integrated approach
         $crate::register_custom_policy(|registry| {
             registry.register_policy::<$policy_type>();
         });
     };
-} 
+}
