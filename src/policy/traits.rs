@@ -1,6 +1,4 @@
-use axum::{
-  http::{Request, Response},
-};
+use axum::http::{Request, Response};
 use async_trait::async_trait;
 use serde::Deserialize;
 
@@ -9,13 +7,16 @@ pub enum PolicyResult {
   Terminate(Response<axum::body::Body>),
 }
 
-#[async_trait]
-pub trait Policy: Send + Sync + 'static {
+pub trait PolicyFactory {
+  type PolicyType: Policy;
   type Config: for<'de> Deserialize<'de> + Send + Sync + 'static;
 
-  fn new(config: Self::Config) -> Result<Self, String> where Self: Sized;
-
-  async fn process(&self, request: Request<axum::body::Body>) -> PolicyResult;
-
+  fn policy_id() -> &'static str;
+  fn new(config: Self::Config) -> Result<Self::PolicyType, String>;
   fn validate_config(config: &Self::Config) -> Result<(), String>;
+}
+
+#[async_trait]
+pub trait Policy: Send + Sync + 'static {
+  async fn process(&self, request: Request<axum::body::Body>) -> PolicyResult;
 }

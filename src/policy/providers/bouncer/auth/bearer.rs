@@ -1,41 +1,91 @@
-use crate::policy::{traits::*};
-use axum::{http::{Request}, response::{Response}};
+use crate::policy::traits::{Policy, PolicyFactory, PolicyResult};
+use axum::{
+    body::Body,
+    http::{Request, Response, StatusCode, header},
+};
 use async_trait::async_trait;
+use serde::Deserialize;
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct BearerAuthConfig {
-    pub header_name: String,
+    pub token: String,
+    pub realm: Option<String>,
 }
 
 pub struct BearerAuthPolicy {
-    header_name: String,
+    config: BearerAuthConfig,
+}
+
+pub struct BearerAuthPolicyFactory;
+
+impl PolicyFactory for BearerAuthPolicyFactory {
+    type PolicyType = BearerAuthPolicy;
+    type Config = BearerAuthConfig;
+
+    fn policy_id() -> &'static str {
+        "@bouncer/auth/bearer"
+    }
+
+    fn new(config: Self::Config) -> Result<Self::PolicyType, String> {
+        Ok(BearerAuthPolicy { config })
+    }
+
+    fn validate_config(config: &Self::Config) -> Result<(), String> {
+        if config.token.is_empty() {
+            Err("token cannot be empty".to_string())
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[async_trait]
 impl Policy for BearerAuthPolicy {
-    type Config = BearerAuthConfig;
+    async fn process(&self, request: Request<Body>) -> PolicyResult {
+        // Check if the request has a valid Authorization header
+        let auth_header = match request.headers().get(header::AUTHORIZATION) {
+            Some(header) => header,
+            None => {
+                return PolicyResult::Terminate(
+                    Response::builder()
+                        .status(StatusCode::UNAUTHORIZED)
+                        .header(header::WWW_AUTHENTICATE, format!("Bearer realm=\"{}\"", 
+                            self.config.realm.as_deref().unwrap_or("api")))
+                        .body(Body::from("Unauthorized: Bearer token required"))
+                        .unwrap()
+                );
+            }
+        };
 
-    fn new(config: Self::Config) -> Result<Self, String> {
-        Ok(Self { header_name: config.header_name })
-    }
+        // Parse the header value
+        let auth_str = match auth_header.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                return PolicyResult::Terminate(
+                    Response::builder()
+                        .status(StatusCode::UNAUTHORIZED)
+                        .body(Body::from("Invalid Authorization header format"))
+                        .unwrap()
+                );
+            }
+        };
 
-    async fn process(&self, request: Request<axum::body::Body>) -> PolicyResult {
-        if request.headers().contains_key(&self.header_name) {
-            PolicyResult::Continue(request)
-        } else {
-            let response = Response::<axum::body::Body>::builder()
-                .status(401)
-                .body("Unauthorized".into())
-                .unwrap();
-            PolicyResult::Terminate(response)
+        // Check if it's a Bearer token and if it matches our configured token
+        if let Some(token) = auth_str.strip_prefix("Bearer ") {
+            if token == self.config.token {
+                // Token is valid, continue processing
+                return PolicyResult::Continue(request);
+            }
         }
-    }
 
-    fn validate_config(config: &Self::Config) -> Result<(), String> {
-        if config.header_name.is_empty() {
-            Err("header_name cannot be empty".to_string())
-        } else {
-            Ok(())
-        }
+        // Invalid token
+        PolicyResult::Terminate(
+            Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .header(header::WWW_AUTHENTICATE, format!("Bearer realm=\"{}\"", 
+                    self.config.realm.as_deref().unwrap_or("api")))
+                .body(Body::from("Unauthorized: Invalid Bearer token"))
+                .unwrap()
+        )
     }
 }
