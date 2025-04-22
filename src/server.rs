@@ -33,7 +33,7 @@ pub async fn start_server(config: crate::config::Config) {
 
     // Create Axum router with middleware for policies
     let app = Router::new()
-        .route("/*path", axum::routing::any(handler))
+        .route("/{*path}", axum::routing::any(handler))
         .layer(policy_chain.into_layer());
 
     // Start the HTTP server
