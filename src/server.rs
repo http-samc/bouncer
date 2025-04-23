@@ -1,4 +1,3 @@
-use crate::get_custom_policies;
 use crate::policy::providers::bouncer::auth::bearer::BearerAuthPolicyFactory;
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;

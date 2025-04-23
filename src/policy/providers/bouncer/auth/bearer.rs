@@ -30,15 +30,15 @@ pub struct BearerAuthPolicy {
     db_adapter: Option<Arc<dyn TokenDatabaseAdapter>>,
 }
 
-// SQL Implementation of the TokenDatabaseAdapter
-#[cfg(feature = "sql")]
-pub struct SqlTokenAdapter {
+// PostgreSQL Implementation of the TokenDatabaseAdapter
+#[cfg(feature = "postgres")]
+pub struct PostgresTokenAdapter {
     client: Arc<sqlx::Pool<sqlx::Postgres>>,
     token_validation_query: String,
 }
 
-#[cfg(feature = "sql")]
-impl SqlTokenAdapter {
+#[cfg(feature = "postgres")]
+impl PostgresTokenAdapter {
     pub fn new(client: Arc<sqlx::Pool<sqlx::Postgres>>, token_validation_query: String) -> Self {
         Self {
             client,
@@ -47,9 +47,40 @@ impl SqlTokenAdapter {
     }
 }
 
-#[cfg(feature = "sql")]
+#[cfg(feature = "postgres")]
 #[async_trait]
-impl TokenDatabaseAdapter for SqlTokenAdapter {
+impl TokenDatabaseAdapter for PostgresTokenAdapter {
+    async fn get_role_from_token(&self, token: &str) -> Result<Option<String>, DatabaseError> {
+        let result = sqlx::query_scalar::<_, String>(&self.token_validation_query)
+            .bind(token)
+            .fetch_optional(&*self.client)
+            .await
+            .map_err(|e| DatabaseError::QueryError(e.to_string()))?;
+
+        Ok(result)
+    }
+}
+
+// MySQL Implementation of the TokenDatabaseAdapter
+#[cfg(feature = "mysql")]
+pub struct MySqlTokenAdapter {
+    client: Arc<sqlx::Pool<sqlx::MySql>>,
+    token_validation_query: String,
+}
+
+#[cfg(feature = "mysql")]
+impl MySqlTokenAdapter {
+    pub fn new(client: Arc<sqlx::Pool<sqlx::MySql>>, token_validation_query: String) -> Self {
+        Self {
+            client,
+            token_validation_query,
+        }
+    }
+}
+
+#[cfg(feature = "mysql")]
+#[async_trait]
+impl TokenDatabaseAdapter for MySqlTokenAdapter {
     async fn get_role_from_token(&self, token: &str) -> Result<Option<String>, DatabaseError> {
         let result = sqlx::query_scalar::<_, String>(&self.token_validation_query)
             .bind(token)
@@ -165,22 +196,22 @@ impl PolicyFactory for BearerAuthPolicyFactory {
 
             // Initialize the appropriate adapter based on the db_provider
             match db_provider.as_str() {
-                #[cfg(feature = "sql")]
-                "sql" => {
+                #[cfg(feature = "postgres")]
+                "postgres" => {
                     if config.token_validation_query.is_none() {
-                        return Err("token_validation_query is required when using SQL database".to_string());
+                        return Err("token_validation_query is required when using PostgreSQL database".to_string());
                     }
 
-                    // Validate SQL config exists
-                    crate::database::validate_database_config(db_config, "sql")
+                    // Validate PostgreSQL config exists
+                    crate::database::validate_database_config(db_config, "postgres")
                         .map_err(|e| e.to_string())?;
 
-                    // Get SQL client
-                    let sql_config = db_config.sql.as_ref()
-                        .ok_or_else(|| "SQL configuration is required".to_string())?;
+                    // Get PostgreSQL client
+                    let postgres_config = db_config.postgres.as_ref()
+                        .ok_or_else(|| "PostgreSQL configuration is required".to_string())?;
 
-                    // Get SQL client asynchronously
-                    let client = crate::database::get_sql_client(sql_config)
+                    // Get PostgreSQL client asynchronously
+                    let client = crate::database::get_postgres_client(postgres_config)
                         .await
                         .map_err(|e| e.to_string())?;
 
@@ -188,7 +219,34 @@ impl PolicyFactory for BearerAuthPolicyFactory {
                         .clone()
                         .ok_or_else(|| "token_validation_query is required".to_string())?;
 
-                    let adapter = SqlTokenAdapter::new(client, token_validation_query);
+                    let adapter = PostgresTokenAdapter::new(client, token_validation_query);
+                    Some(Arc::new(adapter) as Arc<dyn TokenDatabaseAdapter>)
+                },
+
+                #[cfg(feature = "mysql")]
+                "mysql" => {
+                    if config.token_validation_query.is_none() {
+                        return Err("token_validation_query is required when using MySQL database".to_string());
+                    }
+
+                    // Validate MySQL config exists
+                    crate::database::validate_database_config(db_config, "mysql")
+                        .map_err(|e| e.to_string())?;
+
+                    // Get MySQL client
+                    let mysql_config = db_config.mysql.as_ref()
+                        .ok_or_else(|| "MySQL configuration is required".to_string())?;
+
+                    // Get MySQL client asynchronously
+                    let client = crate::database::get_mysql_client(mysql_config)
+                        .await
+                        .map_err(|e| e.to_string())?;
+
+                    let token_validation_query = config.token_validation_query
+                        .clone()
+                        .ok_or_else(|| "token_validation_query is required".to_string())?;
+
+                    let adapter = MySqlTokenAdapter::new(client, token_validation_query);
                     Some(Arc::new(adapter) as Arc<dyn TokenDatabaseAdapter>)
                 },
 
@@ -274,13 +332,21 @@ impl PolicyFactory for BearerAuthPolicyFactory {
         // If using database authentication, validate required parameters
         if let Some(db_provider) = &config.db_provider {
             match db_provider.as_str() {
-                "sql" => {
+                "postgres" => {
                     if config.token_validation_query.is_none() {
-                        return Err("token_validation_query is required when using SQL database".to_string());
+                        return Err("token_validation_query is required when using PostgreSQL database".to_string());
                     }
 
-                    #[cfg(not(feature = "sql"))]
-                    return Err("SQL support is not enabled. Rebuild with the 'sql' feature.".to_string());
+                    #[cfg(not(feature = "postgres"))]
+                    return Err("PostgreSQL support is not enabled. Rebuild with the 'postgres' feature.".to_string());
+                },
+                "mysql" => {
+                    if config.token_validation_query.is_none() {
+                        return Err("token_validation_query is required when using MySQL database".to_string());
+                    }
+
+                    #[cfg(not(feature = "mysql"))]
+                    return Err("MySQL support is not enabled. Rebuild with the 'mysql' feature.".to_string());
                 },
                 "redis" => {
                     if config.token_prefix.is_none() {

@@ -39,9 +39,9 @@ Modify your policy configuration to include database options:
 pub struct BearerAuthConfig {
     pub token: Option<String>,             // Static token (optional)
     pub realm: Option<String>,             // Auth realm
-    pub db_provider: Option<String>,       // Database type: "sql", "redis", "mongo"
+    pub db_provider: Option<String>,       // Database type: "postgres", "mysql", "redis", "mongo"
     pub token_prefix: Option<String>,      // For Redis
-    pub token_validation_query: Option<String>, // For SQL
+    pub token_validation_query: Option<String>, // For PostgreSQL and MySQL
     pub collection: Option<String>,        // For MongoDB
 }
 ```
@@ -52,19 +52,19 @@ Include any database-specific configuration fields needed by each adapter type.
 
 For each supported database, create an adapter struct and implement the trait:
 
-### SQL Example
+### PostgreSQL Example
 
 ```rust
 // 1. Define the adapter struct
-#[cfg(feature = "sql")]
-pub struct SqlTokenAdapter {
+#[cfg(feature = "postgres")]
+pub struct PostgresTokenAdapter {
     client: Arc<sqlx::Pool<sqlx::Postgres>>,
     token_validation_query: String,
 }
 
 // 2. Implement constructor
-#[cfg(feature = "sql")]
-impl SqlTokenAdapter {
+#[cfg(feature = "postgres")]
+impl PostgresTokenAdapter {
     pub fn new(client: Arc<sqlx::Pool<sqlx::Postgres>>, token_validation_query: String) -> Self {
         Self {
             client,
@@ -74,9 +74,46 @@ impl SqlTokenAdapter {
 }
 
 // 3. Implement the domain-specific adapter trait
-#[cfg(feature = "sql")]
+#[cfg(feature = "postgres")]
 #[async_trait]
-impl TokenDatabaseAdapter for SqlTokenAdapter {
+impl TokenDatabaseAdapter for PostgresTokenAdapter {
+    async fn get_role_from_token(&self, token: &str) -> Result<Option<String>, DatabaseError> {
+        let result = sqlx::query_scalar::<_, String>(&self.token_validation_query)
+            .bind(token)
+            .fetch_optional(&*self.client)
+            .await
+            .map_err(|e| DatabaseError::QueryError(e.to_string()))?;
+
+        Ok(result)
+    }
+}
+```
+
+### MySQL Example
+
+```rust
+// 1. Define the adapter struct
+#[cfg(feature = "mysql")]
+pub struct MySqlTokenAdapter {
+    client: Arc<sqlx::Pool<sqlx::MySql>>,
+    token_validation_query: String,
+}
+
+// 2. Implement constructor
+#[cfg(feature = "mysql")]
+impl MySqlTokenAdapter {
+    pub fn new(client: Arc<sqlx::Pool<sqlx::MySql>>, token_validation_query: String) -> Self {
+        Self {
+            client,
+            token_validation_query,
+        }
+    }
+}
+
+// 3. Implement the domain-specific adapter trait
+#[cfg(feature = "mysql")]
+#[async_trait]
+impl TokenDatabaseAdapter for MySqlTokenAdapter {
     async fn get_role_from_token(&self, token: &str) -> Result<Option<String>, DatabaseError> {
         let result = sqlx::query_scalar::<_, String>(&self.token_validation_query)
             .bind(token)
@@ -149,7 +186,7 @@ In your `PolicyFactory` implementation, add code to initialize the appropriate a
 impl PolicyFactory for BearerAuthPolicyFactory {
     // ... existing code ...
 
-    fn new(config: Self::Config) -> Result<Self::PolicyType, String> {
+    async fn new(config: Self::Config) -> Result<Self::PolicyType, String> {
         // Initialize the database adapter if db_provider is specified
         let db_adapter = if let Some(db_provider) = &config.db_provider {
             // Get the global database configuration
@@ -159,33 +196,59 @@ impl PolicyFactory for BearerAuthPolicyFactory {
             };
 
             match db_provider.as_str() {
-                #[cfg(feature = "sql")]
-                "sql" => {
+                #[cfg(feature = "postgres")]
+                "postgres" => {
                     // 1. Validate required configuration
                     if config.token_validation_query.is_none() {
-                        return Err("token_validation_query is required when using SQL database".to_string());
+                        return Err("token_validation_query is required when using PostgreSQL database".to_string());
                     }
 
                     // 2. Validate database connection config exists
-                    crate::database::validate_database_config(db_config, "sql")
+                    crate::database::validate_database_config(db_config, "postgres")
                         .map_err(|e| e.to_string())?;
 
                     // 3. Get client from global connection pool
-                    let sql_config = db_config.sql.as_ref()
-                        .ok_or_else(|| "SQL configuration is required".to_string())?;
+                    let postgres_config = db_config.postgres.as_ref()
+                        .ok_or_else(|| "PostgreSQL configuration is required".to_string())?;
 
-                    let client = tokio::runtime::Handle::current().block_on(async {
-                        crate::database::get_sql_client(sql_config)
-                            .await
-                            .map_err(|e| e.to_string())
-                    })?;
+                    let client = crate::database::get_postgres_client(postgres_config)
+                        .await
+                        .map_err(|e| e.to_string())?;
 
                     // 4. Create adapter with required parameters
                     let token_validation_query = config.token_validation_query
                         .clone()
                         .ok_or_else(|| "token_validation_query is required".to_string())?;
 
-                    let adapter = SqlTokenAdapter::new(client, token_validation_query);
+                    let adapter = PostgresTokenAdapter::new(client, token_validation_query);
+                    Some(Arc::new(adapter) as Arc<dyn TokenDatabaseAdapter>)
+                },
+
+                #[cfg(feature = "mysql")]
+                "mysql" => {
+                    // 1. Validate required configuration
+                    if config.token_validation_query.is_none() {
+                        return Err("token_validation_query is required when using MySQL database".to_string());
+                    }
+
+                    // 2. Validate database connection config exists
+                    crate::database::validate_database_config(db_config, "mysql")
+                        .map_err(|e| e.to_string())?;
+
+                    // 3. Get client from global connection pool
+                    let mysql_config = db_config.mysql.as_ref()
+                        .ok_or_else(|| "MySQL configuration is required".to_string())?;
+
+                    let client = crate::database::get_mysql_client(mysql_config)
+                        .await
+                        .map_err(|e| e.to_string())?;
+
+                    // 4. Create adapter with required parameters
+                    let token_validation_query = config.token_validation_query
+                        .clone()
+                        .ok_or_else(|| "token_validation_query is required".to_string())?;
+
+                    let adapter = MySqlTokenAdapter::new(client, token_validation_query);
                     Some(Arc::new(adapter) as Arc<dyn TokenDatabaseAdapter>)
                 },
 
@@ -210,13 +273,21 @@ impl PolicyFactory for BearerAuthPolicyFactory {
         // Validate database-specific requirements
         if let Some(db_provider) = &config.db_provider {
             match db_provider.as_str() {
-                "sql" => {
+                "postgres" => {
                     if config.token_validation_query.is_none() {
-                        return Err("token_validation_query is required when using SQL database".to_string());
+                        return Err("token_validation_query is required when using PostgreSQL database".to_string());
                     }
 
-                    #[cfg(not(feature = "sql"))]
-                    return Err("SQL support is not enabled. Rebuild with the 'sql' feature.".to_string());
+                    #[cfg(not(feature = "postgres"))]
+                    return Err("PostgreSQL support is not enabled. Rebuild with the 'postgres' feature.".to_string());
+                },
+                "mysql" => {
+                    if config.token_validation_query.is_none() {
+                        return Err("token_validation_query is required when using MySQL database".to_string());
+                    }
+
+                    #[cfg(not(feature = "mysql"))]
+                    return Err("MySQL support is not enabled. Rebuild with the 'mysql' feature.".to_string());
                 },
                 // ... other database types ...
             }
@@ -271,14 +342,27 @@ impl Policy for BearerAuthPolicy {
 
 ## Configuration Example
 
-Example configuration for a bearer policy with SQL database:
+Example configuration for a bearer policy with PostgreSQL database:
 
 ```json
 {
   "type": "@bouncer/auth/bearer",
   "config": {
-    "db_provider": "sql",
+    "db_provider": "postgres",
     "token_validation_query": "SELECT role FROM users WHERE api_token = $1",
+    "realm": "api"
+  }
+}
+```
+
+Example configuration for a bearer policy with MySQL database:
+
+```json
+{
+  "type": "@bouncer/auth/bearer",
+  "config": {
+    "db_provider": "mysql",
+    "token_validation_query": "SELECT role FROM users WHERE api_token = ?",
     "realm": "api"
   }
 }

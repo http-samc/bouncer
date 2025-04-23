@@ -1,4 +1,4 @@
-use crate::config::{DatabasesConfig, MongoConfig, RedisConfig, SqlConfig};
+use crate::config::{DatabasesConfig, MongoConfig, RedisConfig, PostgresConfig, MySqlConfig};
 use std::sync::Arc;
 
 pub mod errors;
@@ -6,26 +6,80 @@ pub use errors::DatabaseError;
 
 // Helper functions for getting database clients
 
-#[cfg(feature = "sql")]
-/// Get a SQL database client from configuration
-pub async fn get_sql_client(config: &SqlConfig) -> Result<Arc<sqlx::Pool<sqlx::Postgres>>, DatabaseError> {
+#[cfg(feature = "postgres")]
+/// Get a PostgreSQL database client from configuration
+pub async fn get_postgres_client(config: &PostgresConfig) -> Result<Arc<sqlx::Pool<sqlx::Postgres>>, DatabaseError> {
     if config.connection_url.is_empty() {
-        return Err(DatabaseError::ConfigurationError("SQL connection URL is required".to_string()));
+        return Err(DatabaseError::ConfigurationError("PostgreSQL connection URL is required".to_string()));
     }
 
+    tracing::debug!("Connecting to PostgreSQL database with URL pattern: {}...", 
+                    config.connection_url.split('@').nth(1).unwrap_or(""));
+    
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(config.connection_pool_size.unwrap_or(5))
         .connect(&config.connection_url)
         .await
-        .map_err(|e| DatabaseError::ConnectionError(e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!("Failed to connect to PostgreSQL: {}", e);
+            DatabaseError::ConnectionError(e.to_string())
+        })?;
 
+    // Test the connection with a simple query
+    sqlx::query("SELECT 1")
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Connection test failed: {}", e);
+            DatabaseError::ConnectionError(e.to_string())
+        })?;
+
+    tracing::info!("Successfully connected to PostgreSQL database");
     Ok(Arc::new(pool))
 }
 
-#[cfg(not(feature = "sql"))]
-/// Get a SQL database client from configuration (feature not enabled)
-pub async fn get_sql_client(_config: &SqlConfig) -> Result<Arc<()>, DatabaseError> {
-    Err(DatabaseError::ConfigurationError("SQL support is not enabled. Rebuild with the 'sql' feature.".to_string()))
+#[cfg(not(feature = "postgres"))]
+/// Get a PostgreSQL database client when feature is not enabled
+pub async fn get_postgres_client(_config: &PostgresConfig) -> Result<Arc<()>, DatabaseError> {
+    Err(DatabaseError::ConfigurationError("PostgreSQL support is not enabled. Rebuild with the 'postgres' feature.".to_string()))
+}
+
+#[cfg(feature = "mysql")]
+/// Get a MySQL database client from configuration
+pub async fn get_mysql_client(config: &MySqlConfig) -> Result<Arc<sqlx::Pool<sqlx::MySql>>, DatabaseError> {
+    if config.connection_url.is_empty() {
+        return Err(DatabaseError::ConfigurationError("MySQL connection URL is required".to_string()));
+    }
+
+    tracing::debug!("Connecting to MySQL database with URL pattern: {}...", 
+                   config.connection_url.split('@').nth(1).unwrap_or(""));
+    
+    let pool = sqlx::mysql::MySqlPoolOptions::new()
+        .max_connections(config.connection_pool_size.unwrap_or(5))
+        .connect(&config.connection_url)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to connect to MySQL: {}", e);
+            DatabaseError::ConnectionError(e.to_string())
+        })?;
+
+    // Test the connection with a simple query
+    sqlx::query("SELECT 1")
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Connection test failed: {}", e);
+            DatabaseError::ConnectionError(e.to_string())
+        })?;
+
+    tracing::info!("Successfully connected to MySQL database");
+    Ok(Arc::new(pool))
+}
+
+#[cfg(not(feature = "mysql"))]
+/// Get a MySQL database client when feature is not enabled
+pub async fn get_mysql_client(_config: &MySqlConfig) -> Result<Arc<()>, DatabaseError> {
+    Err(DatabaseError::ConfigurationError("MySQL support is not enabled. Rebuild with the 'mysql' feature.".to_string()))
 }
 
 #[cfg(feature = "redis")]
@@ -84,16 +138,28 @@ pub async fn get_mongo_client(_config: &MongoConfig) -> Result<Arc<()>, Database
 /// Validate that the databases section of config contains required database
 pub fn validate_database_config(config: &DatabasesConfig, db_provider: &str) -> Result<(), DatabaseError> {
     match db_provider {
-        "sql" => {
-            if config.sql.is_none() {
+        "postgres" => {
+            if config.postgres.is_none() {
                 return Err(DatabaseError::ConfigurationError(
-                    "SQL database configuration is required but not provided".to_string(),
+                    "PostgreSQL database configuration is required but not provided".to_string(),
                 ));
             }
 
-            #[cfg(not(feature = "sql"))]
+            #[cfg(not(feature = "postgres"))]
             return Err(DatabaseError::ConfigurationError(
-                "SQL support is not enabled. Rebuild with the 'sql' feature.".to_string()
+                "PostgreSQL support is not enabled. Rebuild with the 'postgres' feature.".to_string()
+            ));
+        },
+        "mysql" => {
+            if config.mysql.is_none() {
+                return Err(DatabaseError::ConfigurationError(
+                    "MySQL database configuration is required but not provided".to_string(),
+                ));
+            }
+
+            #[cfg(not(feature = "mysql"))]
+            return Err(DatabaseError::ConfigurationError(
+                "MySQL support is not enabled. Rebuild with the 'mysql' feature.".to_string()
             ));
         },
         "redis" => {

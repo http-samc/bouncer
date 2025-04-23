@@ -5,7 +5,8 @@ use std::{collections::HashMap, fs, path::Path};
 #[serde(rename_all = "lowercase")]
 pub enum DatabaseType {
     Redis,
-    Sql,
+    Postgres,
+    Mysql,
     Mongo,
 }
 
@@ -18,7 +19,17 @@ pub struct RedisConfig {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
-pub struct SqlConfig {
+pub struct PostgresConfig {
+    pub connection_url: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub database: Option<String>,
+    pub connection_pool_size: Option<u32>,
+    pub ssl: Option<bool>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct MySqlConfig {
     pub connection_url: String,
     pub username: Option<String>,
     pub password: Option<String>,
@@ -37,7 +48,8 @@ pub struct MongoConfig {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct DatabasesConfig {
     pub redis: Option<RedisConfig>,
-    pub sql: Option<SqlConfig>,
+    pub postgres: Option<PostgresConfig>,
+    pub mysql: Option<MySqlConfig>,
     pub mongo: Option<MongoConfig>,
 }
 

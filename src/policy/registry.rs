@@ -2,7 +2,6 @@ use crate::policy::traits::*;
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
 pub struct PolicyRegistry {
     factories: HashMap<String, Box<dyn Fn(&serde_json::Value) -> futures::future::BoxFuture<'static, Result<Box<dyn Policy>, String>> + Send + Sync>>,
@@ -37,7 +36,7 @@ impl PolicyRegistry {
                     Ok(config) => config,
                     Err(e) => return Box::pin(futures::future::ready(Err(format!("Failed to parse config: {}", e)))),
                 };
-                
+
                 Box::pin(async move {
                     match F::new(parsed_config).await {
                         Ok(policy) => Ok(Box::new(policy) as Box<dyn Policy>),
@@ -114,16 +113,16 @@ impl PolicyRegistry {
         configs: &[crate::config::PolicyConfig],
     ) -> Result<Vec<Box<dyn Policy>>, String> {
         let mut policies = Vec::new();
-        
+
         for cfg in configs {
             let factory = self.factories
                 .get(&cfg.provider)
                 .ok_or_else(|| format!("Unknown provider {}", cfg.provider))?;
-                
+
             let policy = factory(&cfg.parameters).await?;
             policies.push(policy);
         }
-        
+
         Ok(policies)
     }
 }
