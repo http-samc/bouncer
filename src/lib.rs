@@ -1,10 +1,12 @@
 pub mod config;
 pub mod policy;
 pub mod server;
+pub mod database;
 
 use once_cell::sync::Lazy;
 use policy::registry::PolicyRegistry;
 use std::sync::Mutex;
+use once_cell::sync::OnceCell;
 
 // Re-export key components for convenience
 pub use policy::traits::{Policy, PolicyFactory, PolicyResult};
@@ -15,6 +17,9 @@ pub use server::start_server;
 // Global registry for storing custom policy factories
 static CUSTOM_POLICIES: Lazy<Mutex<Vec<fn(&mut PolicyRegistry)>>> =
     Lazy::new(|| Mutex::new(Vec::new()));
+
+// Global configuration that can be accessed from anywhere in the code
+pub static GLOBAL_CONFIG: OnceCell<config::Config> = OnceCell::new();
 
 /// Convenience function to start a Bouncer server with the given config and custom policies
 ///

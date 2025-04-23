@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 pub struct PolicyRegistry {
-    factories: HashMap<String, Box<dyn Fn(&serde_json::Value) -> Result<Box<dyn Policy>, String>>>,
+    factories: HashMap<String, Box<dyn Fn(&serde_json::Value) -> futures::future::BoxFuture<'static, Result<Box<dyn Policy>, String>> + Send + Sync>>,
     // Store loaded libraries to keep them in memory
     #[allow(dead_code)]
     loaded_libraries: Vec<Library>,
@@ -31,10 +31,18 @@ impl PolicyRegistry {
     {
         self.factories.insert(
             F::policy_id().to_string(),
-            Box::new(|config| {
-                let parsed_config = serde_json::from_value::<F::Config>(config.clone())
-                    .map_err(|e| format!("Failed to parse config: {}", e))?;
-                F::new(parsed_config).map(|p| Box::new(p) as Box<dyn Policy>)
+            Box::new(move |config| {
+                let parsed_config = match serde_json::from_value::<F::Config>(config.clone()) {
+                    Ok(config) => config,
+                    Err(e) => return Box::pin(futures::future::ready(Err(format!("Failed to parse config: {}", e)))),
+                };
+
+                Box::pin(async move {
+                    match F::new(parsed_config).await {
+                        Ok(policy) => Ok(Box::new(policy) as Box<dyn Policy>),
+                        Err(e) => Err(e),
+                    }
+                })
             }),
         );
     }
@@ -99,19 +107,22 @@ impl PolicyRegistry {
         Ok(())
     }
 
-    pub fn build_policy_chain(
+    /// Build a policy chain from a list of policy configurations
+    pub async fn build_policy_chain(
         &self,
         configs: &[crate::config::PolicyConfig],
     ) -> Result<Vec<Box<dyn Policy>>, String> {
-        configs
-            .iter()
-            .map(|cfg| {
-                self.factories
-                    .get(&cfg.provider)
-                    .ok_or_else(|| format!("Unknown provider {}", cfg.provider))?(
-                    &cfg.parameters
-                )
-            })
-            .collect()
+        let mut policies = Vec::new();
+
+        for cfg in configs {
+            let factory = self.factories
+                .get(&cfg.provider)
+                .ok_or_else(|| format!("Unknown provider {}", cfg.provider))?;
+
+            let policy = factory(&cfg.parameters).await?;
+            policies.push(policy);
+        }
+
+        Ok(policies)
     }
 }

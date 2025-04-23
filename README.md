@@ -16,6 +16,63 @@ A configurable API gateway and proxy server with dynamic policy middleware.
 
 ## Features
 
+### Database Integration
+
+Bouncer supports integrating with various database types to authenticate requests. The supported databases are:
+
+- SQL (PostgreSQL)
+- Redis
+- MongoDB
+
+To use database integration, you need to enable the appropriate feature flags in your `Cargo.toml`:
+
+```toml
+[dependencies]
+bouncer = { version = "0.1.0", features = ["sql", "redis", "mongo"] }
+```
+
+You can also enable all database types with the `all-db` feature:
+
+```toml
+bouncer = { version = "0.1.0", features = ["all-db"] }
+```
+
+Then configure your database connections in your `config.yaml`:
+
+```yaml
+server:
+  # server config
+
+databases:
+  redis:
+    connection_url: "redis://localhost:6379"
+    password: "optional_password"
+    database: 0
+  sql:
+    connection_url: "postgres://user:password@localhost:5432/mydb"
+    connection_pool_size: 5
+  mongo:
+    connection_uri: "mongodb://localhost:27017"
+    database: "mydb"
+
+# Example: Bearer authentication with SQL database
+@bouncer/auth/bearer:
+  db_provider: sql
+  token_validation_query: SELECT role FROM tokens WHERE id = $1 LIMIT 1;
+
+# Example: Bearer authentication with Redis
+@bouncer/auth/bearer:
+  db_provider: redis
+  token_prefix: tokens
+
+# Example: Bearer authentication with MongoDB
+@bouncer/auth/bearer:
+  db_provider: mongo
+  collection: tokens
+```
+
+Each policy that supports database integration will define its own interface requirements.
+
 ### Custom Policies
 
 Bouncer supports custom policies that can be integrated directly into your application. To create and use a custom policy:
@@ -51,6 +108,28 @@ async fn main() {
 ```
 
 See the `examples/simple-custom-policy` directory for a complete example.
+
+## Environment Variables in Configuration
+
+Bouncer now supports reading configuration values from environment variables. To use this feature, prefix the value with `ENV.` followed by the environment variable name. For example:
+
+```yaml
+databases:
+  mysql:
+    connection_url: "ENV.MYSQL_URL"
+    max_connections: 5
+
+server:
+  port: 8000
+  destination_address: "ENV.API_DESTINATION"
+```
+
+In this example, Bouncer will:
+
+1. Replace `ENV.MYSQL_URL` with the value of the `MYSQL_URL` environment variable
+2. Replace `ENV.API_DESTINATION` with the value of the `API_DESTINATION` environment variable
+
+This works for any string value in the configuration, including in policy parameters.
 
 ## License
 

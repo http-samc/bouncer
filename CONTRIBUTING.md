@@ -52,7 +52,7 @@ cargo test
 - Build and run release version:
 
   ```shell
-  cargo build --release && cargo run --release
+  cargo build --release && cargo run --release -- --config /examples/default/bouncer.config.yaml
   ```
 
 - Run Clippy:
