@@ -36,6 +36,9 @@ cargo build --release
 1. Create a configuration file `config.yaml`:
 
 ```yaml
+# Required field specifying compatible Bouncer version
+bouncer_version: "0.1.*"
+
 server:
   port: 8080
   bind_address: "0.0.0.0"

@@ -135,6 +135,8 @@ pub struct Config {
     pub policies: Vec<PolicyConfig>,
     #[serde(default)]
     pub databases: DatabasesConfig,
+    // Specify bouncer version compatibility (required)
+    pub bouncer_version: String,
     // This will catch all other fields that don't match the above
     #[serde(flatten)]
     pub policy_configs: HashMap<String, serde_json::Value>,
@@ -223,6 +225,14 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config, String> {
     let yaml_str = serde_yaml::to_string(&yaml_value)
         .map_err(|e| format!("Failed to serialize processed YAML: {}", e))?;
     
+    let yaml_map: serde_yaml::Mapping = serde_yaml::from_str(&yaml_str)
+        .map_err(|e| format!("Failed to parse YAML into mapping: {}", e))?;
+    
+    // Check if bouncer_version field is present
+    if !yaml_map.contains_key("bouncer_version") {
+        return Err("Missing required field 'bouncer_version'. Please specify a compatible version (e.g., '0.1.*')".to_string());
+    }
+    
     let mut config: Config = serde_yaml::from_str(&yaml_str)
         .map_err(|e| format!("Failed to parse YAML into Config: {}", e))?;
 
@@ -258,5 +268,73 @@ fn process_yaml_env_vars(value: &mut serde_yaml::Value) {
             }
         }
         _ => {}
+    }
+}
+
+// Check if the specified version in the config is compatible with the current version
+pub fn validate_version(config_version: &str, current_version: &str) -> Result<(), String> {
+    // Parse the current version
+    let current_parts: Vec<&str> = current_version.split('.').collect();
+    if current_parts.len() != 3 {
+        return Err(format!("Invalid current version format: {}", current_version));
+    }
+    
+    // Parse the config version, which may contain wildcards
+    let config_parts: Vec<&str> = config_version.split('.').collect();
+    if config_parts.len() != 3 {
+        return Err(format!("Invalid config version format: {}", config_version));
+    }
+    
+    // Validate major version - must be explicitly specified
+    if config_parts[0] == "*" {
+        return Err("Wildcard major version is not allowed. Use a specific major version number.".to_string());
+    }
+    
+    // Check if major versions match
+    if config_parts[0] != current_parts[0] {
+        return Err(format!(
+            "Major version mismatch: config requires {}, but current is {}",
+            config_parts[0], current_parts[0]
+        ));
+    }
+    
+    // Check minor version if not wildcard
+    if config_parts[1] != "*" && config_parts[1] != current_parts[1] {
+        return Err(format!(
+            "Minor version mismatch: config requires {}.{}.*, but current is {}.{}.{}",
+            config_parts[0], config_parts[1], current_parts[0], current_parts[1], current_parts[2]
+        ));
+    }
+    
+    // Check patch version if not wildcard
+    if config_parts[2] != "*" && config_parts[2] != current_parts[2] {
+        return Err(format!(
+            "Patch version mismatch: config requires {}.{}.{}, but current is {}.{}.{}",
+            config_parts[0], config_parts[1], config_parts[2], 
+            current_parts[0], current_parts[1], current_parts[2]
+        ));
+    }
+    
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version_validation() {
+        // Valid versions
+        assert!(validate_version("0.1.0", "0.1.0").is_ok());
+        assert!(validate_version("0.1.*", "0.1.0").is_ok());
+        assert!(validate_version("0.1.*", "0.1.5").is_ok());
+        assert!(validate_version("0.*.*", "0.1.0").is_ok());
+        assert!(validate_version("0.*.*", "0.2.0").is_ok());
+
+        // Invalid versions
+        assert!(validate_version("1.0.0", "0.1.0").is_err()); // Major version mismatch
+        assert!(validate_version("0.2.0", "0.1.0").is_err()); // Minor version mismatch
+        assert!(validate_version("0.1.1", "0.1.0").is_err()); // Patch version mismatch
+        assert!(validate_version("*.1.0", "0.1.0").is_err()); // Wildcard major not allowed
     }
 }

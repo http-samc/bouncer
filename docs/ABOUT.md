@@ -117,10 +117,14 @@ Bouncer is configured using a YAML file that defines:
 1. **Server settings**: Port, bind address, destination address
 2. **Database connections**: Connection details for supported databases
 3. **Policy chain**: The sequence of policies to apply to each request
+4. **Bouncer version compatibility**: Required field specifying compatible Bouncer version
 
 Example configuration:
 
 ```yaml
+# Required field for version compatibility
+bouncer_version: "0.1.*"
+
 server:
   port: 8080
   bind_address: "0.0.0.0"
@@ -135,6 +139,22 @@ databases:
   db_provider: "sql"
   token_validation_query: "SELECT role FROM tokens WHERE id = $1 LIMIT 1;"
 ```
+
+### Version Compatibility
+
+The `bouncer_version` field is required in all configuration files. It specifies which version of Bouncer the configuration is compatible with. Format:
+
+- **Major version**: Must be explicitly specified (not a wildcard)
+- **Minor version**: Can be explicit or wildcard (`*`)
+- **Patch version**: Can be explicit or wildcard (`*`)
+
+Examples:
+
+- `0.1.0`: Compatible only with Bouncer version 0.1.0
+- `0.1.*`: Compatible with any 0.1.x version
+- `0.*.*`: Compatible with any 0.x.x version
+
+If the running Bouncer version doesn't match the specified compatibility, Bouncer will exit with an error message.
 
 ## Security Considerations
 

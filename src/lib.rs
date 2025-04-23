@@ -14,6 +14,9 @@ pub use policy::traits::{Policy, PolicyFactory, PolicyResult};
 // Simplified API for library users
 pub use server::start_server;
 
+// The crate version from Cargo.toml
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 // Global registry for storing custom policy factories
 static CUSTOM_POLICIES: Lazy<Mutex<Vec<fn(&mut PolicyRegistry)>>> =
     Lazy::new(|| Mutex::new(Vec::new()));
@@ -45,6 +48,14 @@ pub async fn start_with_config(config_path: &str) {
             std::process::exit(1);
         }
     };
+
+    // Check version compatibility
+    if let Err(e) = config::validate_version(&config.bouncer_version, VERSION) {
+        eprintln!("Version compatibility error: {}", e);
+        eprintln!("Config version: {}, Bouncer version: {}", config.bouncer_version, VERSION);
+        eprintln!("Hint: Update your config file with a compatible 'bouncer_version' field.");
+        std::process::exit(1);
+    }
 
     // Start the server with loaded configuration
     server::start_server(config).await;
