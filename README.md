@@ -6,146 +6,67 @@
 
 A configurable API gateway and proxy server with dynamic policy middleware.
 
-## Installation
+## Overview
 
-### Cargo
+Bouncer is a lightweight API gateway that sits between clients and your backend services. It provides:
 
-- Install the rust toolchain in order to have cargo installed by following
-  [this](https://www.rust-lang.org/tools/install) guide.
-- run `cargo install bouncer`
+- **Policy-based middleware** for authentication, authorization, and more
+- **Database integration** with PostgreSQL, Redis, and MongoDB
+- **Extensible architecture** with support for custom policies
+- **Request proxying** to backend services with token verification
 
-## Features
+For a comprehensive explanation of Bouncer's features and architecture, see [docs/ABOUT.md](docs/ABOUT.md).
 
-### Database Integration
+## Quick Start
 
-Bouncer supports integrating with various database types to authenticate requests. The supported databases are:
+### Installation
 
-- SQL (PostgreSQL)
-- Redis
-- MongoDB
+```bash
+# Install from crates.io
+cargo install bouncer
 
-To use database integration, you need to enable the appropriate feature flags in your `Cargo.toml`:
-
-```toml
-[dependencies]
-bouncer = { version = "0.1.0", features = ["sql", "redis", "mongo"] }
+# Or build from source
+git clone https://github.com/http-samc/bouncer.git
+cd bouncer
+cargo build --release
 ```
 
-You can also enable all database types with the `all-db` feature:
+### Running Bouncer
 
-```toml
-bouncer = { version = "0.1.0", features = ["all-db"] }
-```
-
-Then configure your database connections in your `config.yaml`:
+1. Create a configuration file `config.yaml`:
 
 ```yaml
 server:
-  # server config
+  port: 8080
+  bind_address: "0.0.0.0"
+  destination_address: "http://my-backend-api.com"
 
-databases:
-  redis:
-    connection_url: "redis://localhost:6379"
-    password: "optional_password"
-    database: 0
-  sql:
-    connection_url: "postgres://user:password@localhost:5432/mydb"
-    connection_pool_size: 5
-  mongo:
-    connection_uri: "mongodb://localhost:27017"
-    database: "mydb"
-
-# Example: Bearer authentication with SQL database
-@bouncer/auth/bearer:
-  db_provider: sql
-  token_validation_query: SELECT role FROM tokens WHERE id = $1 LIMIT 1;
-
-# Example: Bearer authentication with Redis
-@bouncer/auth/bearer:
-  db_provider: redis
-  token_prefix: tokens
-
-# Example: Bearer authentication with MongoDB
-@bouncer/auth/bearer:
-  db_provider: mongo
-  collection: tokens
+policies:
+  - type: "@bouncer/auth/bearer"
+    config:
+      token: "my-secure-token"
 ```
 
-Each policy that supports database integration will define its own interface requirements.
+2. Set the `BOUNCER_TOKEN` environment variable (optional but recommended):
 
-### Custom Policies
-
-Bouncer supports custom policies that can be integrated directly into your application. To create and use a custom policy:
-
-1. Add `bouncer` as a dependency in your `Cargo.toml`
-2. Implement the `Policy` and `PolicyFactory` traits for your custom policy
-3. Register your policy with `register_custom_policy`
-4. Start the server with `start_with_config`
-
-Example:
-
-```rust
-use bouncer::{Policy, PolicyFactory, PolicyResult, register_custom_policy, start_with_config};
-
-// Define your policy and factory...
-pub struct MyCustomPolicy { /* ... */ }
-pub struct MyCustomPolicyFactory;
-
-// Implement the required traits...
-impl Policy for MyCustomPolicy { /* ... */ }
-impl PolicyFactory for MyCustomPolicyFactory { /* ... */ }
-
-#[tokio::main]
-async fn main() {
-    // Register your custom policy
-    register_custom_policy(|registry| {
-        registry.register_policy::<MyCustomPolicyFactory>();
-    });
-
-    // Start the server with your config
-    start_with_config("config.yaml").await;
-}
+```bash
+export BOUNCER_TOKEN="your-secure-token-here"
 ```
 
-See the `examples/simple-custom-policy` directory for a complete example.
+3. Run Bouncer with your configuration:
 
-## Environment Variables in Configuration
-
-Bouncer now supports reading configuration values from environment variables. To use this feature, prefix the value with `ENV.` followed by the environment variable name. For example:
-
-```yaml
-databases:
-  mysql:
-    connection_url: "ENV.MYSQL_URL"
-    max_connections: 5
-
-server:
-  port: 8000
-  destination_address: "ENV.API_DESTINATION"
+```bash
+bouncer --config config.yaml
 ```
 
-In this example, Bouncer will:
+## Documentation
 
-1. Replace `ENV.MYSQL_URL` with the value of the `MYSQL_URL` environment variable
-2. Replace `ENV.API_DESTINATION` with the value of the `API_DESTINATION` environment variable
-
-This works for any string value in the configuration, including in policy parameters.
+See [ABOUT.md](docs/ABOUT.md) for a comprehensive explanation of Bouncer and additional resources.
 
 ## License
 
-Licensed under either of
-
-- Apache License, Version 2.0
-  ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license
-  ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
+Licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT)).
 
 ## Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
