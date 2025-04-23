@@ -182,7 +182,12 @@ impl PolicyFactory for BearerAuthPolicyFactory {
     type Config = BearerAuthConfig;
 
     fn policy_id() -> &'static str {
-        "@bouncer/auth/bearer"
+        // Only version v1 is supported now
+        crate::policy::providers::bouncer::auth::bearer::policy_id_with_version("v1")
+    }
+
+    fn version() -> Option<&'static str> {
+        Some("v1")
     }
 
     async fn new(config: Self::Config) -> Result<Self::PolicyType, String> {

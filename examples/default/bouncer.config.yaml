@@ -3,6 +3,6 @@ server:
   port: 8000
   destination_address: "ENV.DESTINATION_URL"
 
-"@bouncer/auth/bearer":
+"@bouncer/auth/bearer/v1":
   token: foo
   realm: "api"

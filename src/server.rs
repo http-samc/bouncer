@@ -1,4 +1,3 @@
-use crate::policy::providers::bouncer::auth::bearer::BearerAuthPolicyFactory;
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;
 use axum::body::Body;
@@ -110,7 +109,7 @@ async fn handler(
         let url = {
             let destination_trimmed = destination.trim_end_matches('/');
             let path_trimmed = path.trim_start_matches('/');
-            
+
             if path_trimmed.is_empty() {
                 // Just the destination for root path
                 destination_trimmed.to_string()
@@ -225,8 +224,9 @@ async fn handler(
 
 // Register built-in policies
 fn register_builtin_policies(registry: &mut PolicyRegistry) {
-    // Basic authentication
-    registry.register_policy::<BearerAuthPolicyFactory>();
+    // Only register the versioned implementations
+    registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1::BearerAuthPolicyFactory>();
+    
     // Add other built-in policies here
 }
 

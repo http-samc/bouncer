@@ -7,18 +7,39 @@
 ///
 /// ```rust
 /// use bouncer::register_policy;
-/// use bouncer::{Policy, PolicyFactory, PolicyResult};
+/// use bouncer::policy::traits::{Policy, PolicyFactory, PolicyResult};
+/// use axum::body::Body;
+/// use axum::http::Request;
+/// use async_trait::async_trait;
 ///
 /// pub struct MyCustomPolicy { /* ... */ }
 ///
+/// #[async_trait]
 /// impl Policy for MyCustomPolicy {
-///     // Implementation details...
+///     async fn process(&self, request: Request<Body>) -> PolicyResult {
+///         // Implementation details...
+///         PolicyResult::Continue(request)
+///     }
 /// }
 ///
 /// pub struct MyCustomPolicyFactory;
 ///
+/// #[async_trait]
 /// impl PolicyFactory for MyCustomPolicyFactory {
-///     // Implementation details...
+///     type PolicyType = MyCustomPolicy;
+///     type Config = serde_json::Value;
+///
+///     fn policy_id() -> &'static str {
+///         "@mycustom/policy"
+///     }
+///
+///     async fn new(_config: Self::Config) -> Result<Self::PolicyType, String> {
+///         Ok(MyCustomPolicy { /* ... */ })
+///     }
+///
+///     fn validate_config(_config: &Self::Config) -> Result<(), String> {
+///         Ok(())
+///     }
 /// }
 ///
 /// // Register the policy so it can be used in Bouncer configurations

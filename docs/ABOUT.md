@@ -97,6 +97,19 @@ Bouncer can be extended with custom policies:
 3. Register your policy with the policy registry
 4. Configure your policy in your configuration file
 
+### Policy Versioning
+
+Bouncer requires explicitly versioned policies. You must specify the version in your configuration:
+
+```yaml
+# Using a specific version of a policy
+"@bouncer/auth/bearer/v1":
+  token: my-secure-token
+  realm: "api"
+```
+
+This requirement ensures clarity about which version of a policy is being used and simplifies the codebase.
+
 ## Configuration
 
 Bouncer is configured using a YAML file that defines:
@@ -118,11 +131,9 @@ databases:
     connection_url: "postgres://user:password@localhost:5432/mydb"
     connection_pool_size: 5
 
-policies:
-  - type: "@bouncer/auth/bearer"
-    config:
-      db_provider: "sql"
-      token_validation_query: "SELECT role FROM tokens WHERE id = $1 LIMIT 1;"
+"@bouncer/auth/bearer/v1":
+  db_provider: "sql"
+  token_validation_query: "SELECT role FROM tokens WHERE id = $1 LIMIT 1;"
 ```
 
 ## Security Considerations
@@ -142,3 +153,7 @@ For complete details on configuring database integration with policies, see [DAT
 ## Token Authentication Details
 
 For complete details on configuring and using the Bouncer token authentication mechanism, see [BOUNCER_TOKEN.md](BOUNCER_TOKEN.md).
+
+```
+
+```

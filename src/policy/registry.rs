@@ -29,8 +29,11 @@ impl PolicyRegistry {
         F: PolicyFactory + 'static,
         F::PolicyType: 'static,
     {
+        let policy_id = F::policy_id().to_string();
+        tracing::debug!("Registering policy: {}", policy_id);
+        
         self.factories.insert(
-            F::policy_id().to_string(),
+            policy_id,
             Box::new(move |config| {
                 let parsed_config = match serde_json::from_value::<F::Config>(config.clone()) {
                     Ok(config) => config,
@@ -107,6 +110,19 @@ impl PolicyRegistry {
         Ok(())
     }
 
+    // Split a policy provider identifier into parts
+    // For example, "@bouncer/auth/bearer/v1" -> ("@bouncer/auth/bearer", "v1")
+    fn split_policy_provider(provider: &str) -> Result<(String, String), String> {
+        let parts: Vec<&str> = provider.split('/').collect();
+        if parts.len() < 4 || !parts.last().unwrap().starts_with('v') {
+            return Err(format!("Invalid policy ID: {}. All policies must specify a version (e.g., @provider/category/name/v1)", provider));
+        }
+        
+        let version = parts.last().unwrap().to_string();
+        let base_provider = parts[..parts.len() - 1].join("/");
+        Ok((base_provider, version))
+    }
+
     /// Build a policy chain from a list of policy configurations
     pub async fn build_policy_chain(
         &self,
@@ -115,9 +131,15 @@ impl PolicyRegistry {
         let mut policies = Vec::new();
 
         for cfg in configs {
+            // Policies must explicitly specify a version
+            let (_base_provider, _version) = Self::split_policy_provider(&cfg.provider)?;
+            
+            // Look up the policy by its versioned ID
             let factory = self.factories
                 .get(&cfg.provider)
-                .ok_or_else(|| format!("Unknown provider {}", cfg.provider))?;
+                .ok_or_else(|| format!("Unknown policy provider: {}. Available providers: {:?}", 
+                    cfg.provider, 
+                    self.factories.keys().collect::<Vec<_>>()))?;
 
             let policy = factory(&cfg.parameters).await?;
             policies.push(policy);

@@ -59,12 +59,39 @@ pub async fn start_with_config(config_path: &str) {
 /// # Example
 ///
 /// ```rust,no_run
-/// use bouncer::{register_custom_policy, PolicyFactory};
+/// use bouncer::{register_custom_policy, policy::traits::{Policy, PolicyFactory, PolicyResult}};
+/// use async_trait::async_trait;
+/// use axum::body::Body;
+/// use axum::http::Request;
+///
+/// pub struct MyCustomPolicy;
+///
+/// #[async_trait]
+/// impl Policy for MyCustomPolicy {
+///     async fn process(&self, request: Request<Body>) -> PolicyResult {
+///         // Implementation details...
+///         PolicyResult::Continue(request)
+///     }
+/// }
 ///
 /// pub struct MyCustomPolicyFactory;
 ///
+/// #[async_trait]
 /// impl PolicyFactory for MyCustomPolicyFactory {
-///     // Implementation details...
+///     type PolicyType = MyCustomPolicy;
+///     type Config = serde_json::Value;
+///
+///     fn policy_id() -> &'static str {
+///         "@mycustom/policy"
+///     }
+///
+///     async fn new(_config: Self::Config) -> Result<Self::PolicyType, String> {
+///         Ok(MyCustomPolicy)
+///     }
+///
+///     fn validate_config(_config: &Self::Config) -> Result<(), String> {
+///         Ok(())
+///     }
 /// }
 ///
 /// fn main() {
