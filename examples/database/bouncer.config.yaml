@@ -1,0 +1,15 @@
+server:
+  bind_address: 127.0.0.1
+  port: 8000
+  destination_address: "ENV.DESTINATION_URL"
+
+databases:
+  mysql:
+    connection_url: "ENV.MYSQL_URL"
+    max_connections: 5
+    connection_timeout: 5
+
+"@bouncer/auth/bearer":
+  db_provider: "mysql"
+  token_validation_query: "SELECT access_level as role FROM users WHERE clerkUuid = ?"
+  realm: "api"

@@ -109,6 +109,28 @@ async fn main() {
 
 See the `examples/simple-custom-policy` directory for a complete example.
 
+## Environment Variables in Configuration
+
+Bouncer now supports reading configuration values from environment variables. To use this feature, prefix the value with `ENV.` followed by the environment variable name. For example:
+
+```yaml
+databases:
+  mysql:
+    connection_url: "ENV.MYSQL_URL"
+    max_connections: 5
+
+server:
+  port: 8000
+  destination_address: "ENV.API_DESTINATION"
+```
+
+In this example, Bouncer will:
+
+1. Replace `ENV.MYSQL_URL` with the value of the `MYSQL_URL` environment variable
+2. Replace `ENV.API_DESTINATION` with the value of the `API_DESTINATION` environment variable
+
+This works for any string value in the configuration, including in policy parameters.
+
 ## License
 
 Licensed under either of
