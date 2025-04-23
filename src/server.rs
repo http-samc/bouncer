@@ -12,8 +12,14 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+use crate::GLOBAL_CONFIG;
 
 pub async fn start_server(config: crate::config::Config) {
+    // Store config in global cell for access from policies
+    if GLOBAL_CONFIG.set(config.clone()).is_err() {
+        tracing::warn!("Global config already set, using existing config");
+    }
+
     // Check for BOUNCER_TOKEN environment variable
     let bouncer_token = match env::var("BOUNCER_TOKEN") {
         Ok(token) => token,
@@ -46,6 +52,7 @@ pub async fn start_server(config: crate::config::Config) {
     // Build policy chain based on config file
     let policy_chain = registry
         .build_policy_chain(&config.policies)
+        .await
         .expect("Failed to build policy chain");
 
     // Create a shared HTTP client for forwarding requests
@@ -217,16 +224,16 @@ async fn handler(
         .unwrap()
 }
 
-// Function to register built-in policies
+// Register built-in policies
 fn register_builtin_policies(registry: &mut PolicyRegistry) {
+    // Basic authentication
     registry.register_policy::<BearerAuthPolicyFactory>();
+    // Add other built-in policies here
 }
 
-// Function to register user-provided custom policies
-#[allow(clippy::needless_borrow)]
+// Register custom policies from global registry
 fn register_custom_policies(registry: &mut PolicyRegistry) {
-    // Use a fully qualified path rather than an import
-    for register_fn in get_custom_policies() {
+    for register_fn in crate::get_custom_policies() {
         register_fn(registry);
     }
 }
