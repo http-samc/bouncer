@@ -10,8 +10,10 @@ databases:
     connection_url: "ENV.MYSQL_URL"
     max_connections: 5
     connection_timeout: 5
+  redis:
+    connection_url: "ENV.REDIS_URL"
 
-"@bouncer/auth/bearer/v1":
-  db_provider: "mysql"
-  token_validation_query: "SELECT access_level as role FROM users WHERE clerkUuid = ?"
+"@bouncer/auth/bearer/v1-managed":
   realm: "api"
+  token_key_prefix: "ENV.TOKEN_KEY_REPR"
+  token_key_salt: "ENV.TOKEN_KEY_SALT"
