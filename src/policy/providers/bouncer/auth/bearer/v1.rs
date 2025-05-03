@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use axum::{
     body::Body,
     http::{header, Request, Response, StatusCode},
-    response::IntoResponse,
     routing::get,
 };
 use serde::Deserialize;

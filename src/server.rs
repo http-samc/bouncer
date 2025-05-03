@@ -1,7 +1,7 @@
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;
 use axum::body::Body;
-use axum::http::{Request, Response, StatusCode, Uri};
+use axum::http::{Request, Response, StatusCode};
 use axum::Router;
 use axum_server::Server;
 use reqwest;
@@ -11,8 +11,6 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use crate::GLOBAL_CONFIG;
-use tower::ServiceBuilder;
-use tower::Layer;
 
 pub async fn start_server(config: crate::config::Config) {
     // Store config in global cell for access from policies

@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use axum::http::{Request, Response};
-use axum::routing::MethodRouter;
 use axum::body::Body;
 use serde::Deserialize;
 

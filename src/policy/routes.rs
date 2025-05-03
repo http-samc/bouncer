@@ -1,17 +1,7 @@
 use axum::{
-    body::Body,
-    http::{Request, Response, StatusCode},
     routing::MethodRouter,
     Router,
-    response::IntoResponse,
 };
-use std::sync::Arc;
-
-// Private to the module
-struct PolicyRoute {
-    full_path: String,
-    handler: MethodRouter<Body>,
-}
 
 pub struct PolicyRouteBuilder {
     base_path: String,
