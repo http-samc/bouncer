@@ -78,4 +78,4 @@ impl Policy for BearerAuthManagedPolicy {
         // Delegate to the inner v1 policy's process method
         self.inner.process(request).await
     }
-} 
+}
