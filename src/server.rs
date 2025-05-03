@@ -65,14 +65,14 @@ pub async fn start_server(config: crate::config::Config) {
     // Create Axum router with middleware for policies
     let app = Router::new()
         // Add policy routes first
-        .merge(policy_router)
+        .merge(policy_router.into_router())
         // Add catch-all route for forwarding (excluding /_admin paths)
         .route(
             "/{*path}",
             axum::routing::any(move |req: Request<Body>| async move {
                 let path = req.uri().path();
                 tracing::debug!("Received request for path: {}", path);
-                
+
                 // Don't forward /_admin paths
                 if path.starts_with("/_admin") {
                     tracing::debug!("Path starts with /_admin, returning 404");
@@ -81,7 +81,7 @@ pub async fn start_server(config: crate::config::Config) {
                         .body(Body::from("Not Found"))
                         .unwrap();
                 }
-                
+
                 // Clone the token for use in the handler
                 let token = bouncer_token.clone();
                 handler(req, client.clone(), config_for_handler.clone(), token).await
@@ -241,7 +241,8 @@ async fn handler(
 fn register_builtin_policies(registry: &mut PolicyRegistry) {
     // Only register the versioned implementations
     registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1::BearerAuthPolicyFactory>();
-    
+    registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1_managed::BearerAuthManagedPolicyFactory>();
+
     // Add other built-in policies here
 }
 

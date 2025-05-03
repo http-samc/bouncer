@@ -396,19 +396,6 @@ impl Policy for BearerAuthPolicy {
         "v1"
     }
 
-    fn register_routes(&self) -> Vec<crate::policy::routes::RouteRegistration> {
-        tracing::debug!("Registering routes for bearer auth policy v1");
-        vec![
-            crate::policy::routes::RouteRegistration {
-                relative_path: "".to_string(), // Base path
-                handler: get(|| async { 
-                    tracing::debug!("Bearer auth policy v1 handler called");
-                    "Hello from Bearer Auth Policy v1!" 
-                }),
-            }
-        ]
-    }
-
     async fn process(&self, request: Request<Body>) -> PolicyResult {
         // Extract the Authorization header
         let auth_header = match request.headers().get(header::AUTHORIZATION) {

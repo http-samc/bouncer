@@ -1,9 +1,17 @@
-use crate::policy::traits::*;
-use crate::policy::routes::PolicyRouter;
+use crate::config::PolicyConfig;
+use crate::policy::routes::{PolicyRouter, RouteRegistration};
+use crate::policy::traits::{Policy, PolicyFactory, PolicyResult};
+use async_trait::async_trait;
+use axum::{
+    body::Body,
+    http::{Request, Response},
+    Router,
+};
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
 use std::path::Path;
-use axum::Router;
+use std::sync::Arc;
+use tracing;
 
 pub struct PolicyRegistry {
     factories: HashMap<String, Box<dyn Fn(&serde_json::Value) -> futures::future::BoxFuture<'static, Result<Box<dyn Policy>, String>> + Send + Sync>>,
@@ -130,48 +138,43 @@ impl PolicyRegistry {
 
     /// Build a policy chain from a list of policy configurations
     pub async fn build_policy_chain(
-        &mut self,
-        configs: &[crate::config::PolicyConfig],
-    ) -> Result<(Vec<Box<dyn Policy>>, Router), String> {
-        tracing::debug!("Building policy chain with {} policies", configs.len());
-        let mut policies = Vec::new();
+        &self,
+        config: &[PolicyConfig],
+    ) -> Result<(Vec<Box<dyn Policy>>, PolicyRouter), String> {
+        let mut policy_chain = Vec::new();
+        let mut policy_router = PolicyRouter::new();
 
-        for cfg in configs {
-            tracing::debug!("Processing policy config: {}", cfg.provider);
-            // Policies must explicitly specify a version
-            let (_base_provider, _version) = Self::split_policy_provider(&cfg.provider)?;
-
-            // Look up the policy by its versioned ID
+        for policy_config in config {
             let factory = self.factories
-                .get(&cfg.provider)
-                .ok_or_else(|| format!("Unknown policy provider: {}. Available providers: {:?}",
-                    cfg.provider,
-                    self.factories.keys().collect::<Vec<_>>()))?;
+                .get(&policy_config.provider)
+                .ok_or_else(|| {
+                    format!(
+                        "Policy not found for provider ID: {}",
+                        policy_config.provider
+                    )
+                })?;
 
-            let policy = factory(&cfg.parameters).await?;
-            tracing::debug!("Created policy instance: {} {} {} {}",
-                policy.provider(),
-                policy.category(),
-                policy.name(),
-                policy.version()
-            );
+            let policy = factory(&policy_config.parameters).await?;
 
-            // Register routes for this policy
-            let base_path = format!("/_admin/{}/{}/{}/{}",
-                policy.provider(),
-                policy.category(),
-                policy.name(),
-                policy.version()
-            );
-            tracing::debug!("Registering routes for policy at base path: {}", base_path);
-
+            // Register routes for all policies
             let routes = policy.register_routes();
-            self.policy_router.register_routes(routes, &base_path);
+            if !routes.is_empty() {
+                let base_path = format!(
+                    "/_admin/{}/{}/{}/{}",
+                    policy.provider(),
+                    policy.category(),
+                    policy.name(),
+                    policy.version()
+                );
+                policy_router.register_routes(routes, &base_path);
+            }
 
-            policies.push(policy);
+            // Only add to policy chain if the policy processes requests
+            if policy.processes_requests() {
+                policy_chain.push(policy);
+            }
         }
 
-        tracing::debug!("Policy chain built with {} policies", policies.len());
-        Ok((policies, self.policy_router.clone().into_router()))    
+        Ok((policy_chain, policy_router))
     }
 }
