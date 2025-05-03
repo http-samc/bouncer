@@ -1,16 +1,9 @@
 use crate::config::PolicyConfig;
-use crate::policy::routes::{PolicyRouter, RouteRegistration};
-use crate::policy::traits::{Policy, PolicyFactory, PolicyResult};
-use async_trait::async_trait;
-use axum::{
-    body::Body,
-    http::{Request, Response},
-    Router,
-};
+use crate::policy::routes::PolicyRouter;
+use crate::policy::traits::{Policy, PolicyFactory};
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use tracing;
 
 pub struct PolicyRegistry {

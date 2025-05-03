@@ -3,11 +3,9 @@ use crate::policy::traits::{Policy, PolicyFactory, PolicyResult};
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    http::{Request, Response, StatusCode},
+    http::Request,
     routing::get,
 };
-use serde::Deserialize;
-use std::sync::Arc;
 
 // Re-export the config type from v1
 pub use super::v1::BearerAuthConfig;
