@@ -12,7 +12,7 @@ pub struct PolicyRegistry {
     #[allow(dead_code)]
     loaded_libraries: Vec<Library>,
     // Store policy routes
-    policy_router: PolicyRouter,
+    // policy_router: PolicyRouter,
 }
 
 impl Default for PolicyRegistry {
@@ -26,7 +26,7 @@ impl PolicyRegistry {
         Self {
             factories: HashMap::new(),
             loaded_libraries: Vec::new(),
-            policy_router: PolicyRouter::new(),
+            // policy_router: PolicyRouter::new(),
         }
     }
 
@@ -118,16 +118,16 @@ impl PolicyRegistry {
 
     // Split a policy provider identifier into parts
     // For example, "@bouncer/auth/bearer/v1" -> ("@bouncer/auth/bearer", "v1")
-    fn split_policy_provider(provider: &str) -> Result<(String, String), String> {
-        let parts: Vec<&str> = provider.split('/').collect();
-        if parts.len() < 4 || !parts.last().unwrap().starts_with('v') {
-            return Err(format!("Invalid policy ID: {}. All policies must specify a version (e.g., @provider/category/name/v1)", provider));
-        }
+    // fn split_policy_provider(provider: &str) -> Result<(String, String), String> {
+    //     let parts: Vec<&str> = provider.split('/').collect();
+    //     if parts.len() < 4 || !parts.last().unwrap().starts_with('v') {
+    //         return Err(format!("Invalid policy ID: {}. All policies must specify a version (e.g., @provider/category/name/v1)", provider));
+    //     }
 
-        let version = parts.last().unwrap().to_string();
-        let base_provider = parts[..parts.len() - 1].join("/");
-        Ok((base_provider, version))
-    }
+    //     let version = parts.last().unwrap().to_string();
+    //     let base_provider = parts[..parts.len() - 1].join("/");
+    //     Ok((base_provider, version))
+    // }
 
     /// Build a policy chain from a list of policy configurations
     pub async fn build_policy_chain(
