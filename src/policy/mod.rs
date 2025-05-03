@@ -2,6 +2,7 @@ pub mod macros;
 pub mod middleware;
 pub mod providers;
 pub mod registry;
+pub mod routes;
 pub mod traits;
 
 pub use middleware::PolicyChainExt;

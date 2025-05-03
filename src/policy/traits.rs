@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 use axum::http::{Request, Response};
+use axum::routing::MethodRouter;
+use axum::body::Body;
 use serde::Deserialize;
 
 pub enum PolicyResult {
@@ -33,5 +35,14 @@ pub trait PolicyFactory {
 
 #[async_trait]
 pub trait Policy: Send + Sync + 'static {
-    async fn process(&self, request: Request<axum::body::Body>) -> PolicyResult;
+    fn provider(&self) -> &'static str;
+    fn category(&self) -> &'static str;
+    fn name(&self) -> &'static str;
+    fn version(&self) -> &'static str;
+
+    fn register_routes(&self) -> Vec<crate::policy::routes::RouteRegistration> {
+        vec![]
+    }
+
+    async fn process(&self, request: Request<Body>) -> PolicyResult;
 }

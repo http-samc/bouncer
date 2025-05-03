@@ -1,7 +1,7 @@
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;
 use axum::body::Body;
-use axum::http::{Request, Response, StatusCode};
+use axum::http::{Request, Response, StatusCode, Uri};
 use axum::Router;
 use axum_server::Server;
 use reqwest;
@@ -11,6 +11,8 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use crate::GLOBAL_CONFIG;
+use tower::ServiceBuilder;
+use tower::Layer;
 
 pub async fn start_server(config: crate::config::Config) {
     // Store config in global cell for access from policies
@@ -48,7 +50,7 @@ pub async fn start_server(config: crate::config::Config) {
     }
 
     // Build policy chain based on config file
-    let policy_chain = registry
+    let (policy_chain, policy_router) = registry
         .build_policy_chain(&config.policies)
         .await
         .expect("Failed to build policy chain");
@@ -64,12 +66,27 @@ pub async fn start_server(config: crate::config::Config) {
 
     // Create Axum router with middleware for policies
     let app = Router::new()
+        // Add policy routes first
+        .merge(policy_router)
+        // Add catch-all route for forwarding (excluding /_admin paths)
         .route(
             "/{*path}",
-            axum::routing::any(move |req| {
+            axum::routing::any(move |req: Request<Body>| async move {
+                let path = req.uri().path();
+                tracing::debug!("Received request for path: {}", path);
+                
+                // Don't forward /_admin paths
+                if path.starts_with("/_admin") {
+                    tracing::debug!("Path starts with /_admin, returning 404");
+                    return Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .body(Body::from("Not Found"))
+                        .unwrap();
+                }
+                
                 // Clone the token for use in the handler
                 let token = bouncer_token.clone();
-                handler(req, client.clone(), config_for_handler.clone(), token)
+                handler(req, client.clone(), config_for_handler.clone(), token).await
             }),
         )
         .layer(policy_chain.into_layer());

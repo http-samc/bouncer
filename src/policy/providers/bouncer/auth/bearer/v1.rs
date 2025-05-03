@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use axum::{
     body::Body,
     http::{header, Request, Response, StatusCode},
+    response::IntoResponse,
+    routing::get,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -379,6 +381,35 @@ impl PolicyFactory for BearerAuthPolicyFactory {
 
 #[async_trait]
 impl Policy for BearerAuthPolicy {
+    fn provider(&self) -> &'static str {
+        "bouncer"
+    }
+
+    fn category(&self) -> &'static str {
+        "auth"
+    }
+
+    fn name(&self) -> &'static str {
+        "bearer"
+    }
+
+    fn version(&self) -> &'static str {
+        "v1"
+    }
+
+    fn register_routes(&self) -> Vec<crate::policy::routes::RouteRegistration> {
+        tracing::debug!("Registering routes for bearer auth policy v1");
+        vec![
+            crate::policy::routes::RouteRegistration {
+                relative_path: "".to_string(), // Base path
+                handler: get(|| async { 
+                    tracing::debug!("Bearer auth policy v1 handler called");
+                    "Hello from Bearer Auth Policy v1!" 
+                }),
+            }
+        ]
+    }
+
     async fn process(&self, request: Request<Body>) -> PolicyResult {
         // Extract the Authorization header
         let auth_header = match request.headers().get(header::AUTHORIZATION) {
