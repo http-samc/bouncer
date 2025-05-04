@@ -241,7 +241,6 @@ async fn handler(
 fn register_builtin_policies(registry: &mut PolicyRegistry) {
     // Only register the versioned implementations
     registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1::BearerAuthPolicyFactory>();
-    registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1_managed::BearerAuthManagedPolicyFactory>();
 
     // Add other built-in policies here
 }
