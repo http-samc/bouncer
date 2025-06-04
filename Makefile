@@ -5,7 +5,7 @@ build:
 	cargo build --release
 
 run:
-	env $(shell cat .env) cargo run --release -- --config examples/managed/bouncer.config.yaml
+	env $(shell cat .env) cargo run --release -- --config examples/database/bouncer.config.yaml
 
 dev:
 	make build && make run
