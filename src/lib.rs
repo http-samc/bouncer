@@ -1,12 +1,12 @@
 pub mod config;
+pub mod database;
 pub mod policy;
 pub mod server;
-pub mod database;
 
 use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
 use policy::registry::PolicyRegistry;
 use std::sync::Mutex;
-use once_cell::sync::OnceCell;
 
 // Re-export key components for convenience
 pub use policy::traits::{Policy, PolicyFactory, PolicyResult};
@@ -52,7 +52,10 @@ pub async fn start_with_config(config_path: &str) {
     // Check version compatibility
     if let Err(e) = config::validate_version(&config.bouncer_version, VERSION) {
         eprintln!("Version compatibility error: {}", e);
-        eprintln!("Config version: {}, Bouncer version: {}", config.bouncer_version, VERSION);
+        eprintln!(
+            "Config version: {}, Bouncer version: {}",
+            config.bouncer_version, VERSION
+        );
         eprintln!("Hint: Update your config file with a compatible 'bouncer_version' field.");
         std::process::exit(1);
     }

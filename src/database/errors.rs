@@ -27,4 +27,4 @@ impl fmt::Display for DatabaseError {
     }
 }
 
-impl std::error::Error for DatabaseError {} 
+impl std::error::Error for DatabaseError {}

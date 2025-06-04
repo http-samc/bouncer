@@ -65,8 +65,7 @@ impl PolicyFactory for BearerAuthPolicyFactory {
     type Config = BearerAuthConfig;
 
     fn policy_id() -> &'static str {
-        // Only version v1 is supported now
-        crate::policy::providers::bouncer::auth::bearer::policy_id_with_version("v1")
+        crate::policy::providers::bouncer::authentication::bearer::policy_id_with_version("v1")
     }
 
     fn version() -> Option<&'static str> {
@@ -81,7 +80,9 @@ impl PolicyFactory for BearerAuthPolicyFactory {
             }
 
             if config.token_validation_query.is_none() {
-                return Err("token_validation_query is required when using MySQL database".to_string());
+                return Err(
+                    "token_validation_query is required when using MySQL database".to_string(),
+                );
             }
 
             // Get the global database configuration
@@ -95,7 +96,9 @@ impl PolicyFactory for BearerAuthPolicyFactory {
                 .map_err(|e| e.to_string())?;
 
             // Get MySQL client
-            let mysql_config = db_config.mysql.as_ref()
+            let mysql_config = db_config
+                .mysql
+                .as_ref()
                 .ok_or_else(|| "MySQL configuration is required".to_string())?;
 
             // Get MySQL client asynchronously
@@ -103,38 +106,32 @@ impl PolicyFactory for BearerAuthPolicyFactory {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            let token_validation_query = config.token_validation_query
-                .clone()
-                .ok_or_else(|| "token_validation_query is required".to_string())?;
-
-            let adapter = MySqlTokenAdapter::new(client, token_validation_query);
-            Some(Arc::new(adapter) as Arc<dyn TokenDatabaseAdapter>)
+            // Create the adapter
+            Some(Arc::new(MySqlTokenAdapter::new(
+                client,
+                config.token_validation_query.clone().unwrap(),
+            )) as Arc<dyn TokenDatabaseAdapter>)
         } else {
             None
         };
 
-        // If using static token authentication, validate that token is provided
-        if db_adapter.is_none() && config.token.is_none() {
-            return Err("Either token or db_provider must be specified".to_string());
-        }
-
-        Ok(BearerAuthPolicy { config, db_adapter })
+        Ok(BearerAuthPolicy {
+            config,
+            db_adapter,
+        })
     }
 
     fn validate_config(config: &Self::Config) -> Result<(), String> {
-        // Either a static token or a database provider is required
-        if config.token.is_none() && config.db_provider.is_none() {
-            return Err("Either token or db_provider must be specified".to_string());
-        }
-
-        // If using database authentication, validate required parameters
+        // If using database authentication, validate required fields
         if let Some(db_provider) = &config.db_provider {
             if db_provider != "mysql" {
                 return Err("Only MySQL database provider is supported".to_string());
             }
 
             if config.token_validation_query.is_none() {
-                return Err("token_validation_query is required when using MySQL database".to_string());
+                return Err(
+                    "token_validation_query is required when using MySQL database".to_string(),
+                );
             }
         }
 
@@ -149,7 +146,7 @@ impl Policy for BearerAuthPolicy {
     }
 
     fn category(&self) -> &'static str {
-        "auth"
+        "authentication"
     }
 
     fn name(&self) -> &'static str {
@@ -229,7 +226,7 @@ impl Policy for BearerAuthPolicy {
                         }),
                     );
                     return PolicyResult::Continue(request);
-                },
+                }
                 Ok(None) => false,
                 Err(e) => {
                     tracing::error!("Database authentication error: {}", e);
@@ -259,7 +256,7 @@ impl Policy for BearerAuthPolicy {
                             self.config.realm.as_deref().unwrap_or("api")
                         ),
                     )
-                    .body(Body::from("Unauthorized: Invalid Bearer token"))
+                    .body(Body::from("Unauthorized: Invalid token"))
                     .unwrap(),
             )
         }

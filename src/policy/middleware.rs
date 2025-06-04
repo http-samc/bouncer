@@ -60,6 +60,9 @@ where
         Box::pin(async move {
             let mut current_request = request;
 
+            // Prevent injection of protected bouncer headers
+            clear_bouncer_headers(current_request.headers_mut());
+
             // Process each policy in the chain
             for policy in policies.iter() {
                 match policy.process(current_request).await {
@@ -77,6 +80,19 @@ where
             // If all policies pass, forward the request to the inner service
             inner.call(current_request).await
         })
+    }
+}
+
+// Clear all headers that start with x-bouncer-
+fn clear_bouncer_headers(headers: &mut axum::http::HeaderMap) {
+    let bouncer_headers: Vec<_> = headers
+        .iter()
+        .filter(|(name, _)| name.as_str().to_lowercase().starts_with("x-bouncer-"))
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    for name in bouncer_headers {
+        headers.remove(name);
     }
 }
 

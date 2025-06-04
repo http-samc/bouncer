@@ -1,5 +1,6 @@
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;
+use crate::GLOBAL_CONFIG;
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use axum::Router;
@@ -10,7 +11,6 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use crate::GLOBAL_CONFIG;
 
 pub async fn start_server(config: crate::config::Config) {
     // Store config in global cell for access from policies
@@ -23,7 +23,9 @@ pub async fn start_server(config: crate::config::Config) {
         Ok(token) => token,
         Err(_) => {
             tracing::warn!("BOUNCER_TOKEN environment variable not set. This may make your target API vulnerable to impersonation.");
-            tracing::warn!("Using insecure default token 'secret'. Please set BOUNCER_TOKEN in production.");
+            tracing::warn!(
+                "Using insecure default token 'secret'. Please set BOUNCER_TOKEN in production."
+            );
             "secret".to_string()
         }
     };
@@ -139,17 +141,11 @@ async fn handler(
 
         tracing::info!("Forwarding to URL: {}", url);
 
-        // Extract headers and body from the request, filtering out bouncer-* headers
+        // Extract headers and body from the request
         let mut headers = reqwest::header::HeaderMap::new();
         for (name, value) in req.headers() {
-            // Skip any header starting with 'bouncer' (case/whitespace insensitive)
-            let header_str = name.as_str().to_lowercase();
-            if header_str.starts_with("bouncer") {
-                continue;
-            }
-
             // Skip host header as we'll set it correctly
-            if header_str == "host" {
+            if name.as_str().to_lowercase() == "host" {
                 continue;
             }
 
@@ -160,9 +156,17 @@ async fn handler(
             }
         }
 
+        // Clear any bouncer headers
+        clear_bouncer_headers(&mut headers);
+
         // Set the correct host header based on the destination URL
         if let Ok(host_value) = reqwest::header::HeaderValue::from_str(
-            url.split("://").nth(1).unwrap_or("").split('/').next().unwrap_or("")
+            url.split("://")
+                .nth(1)
+                .unwrap_or("")
+                .split('/')
+                .next()
+                .unwrap_or(""),
         ) {
             headers.insert(reqwest::header::HOST, host_value);
         }
@@ -252,7 +256,8 @@ async fn handler(
 // Register built-in policies
 fn register_builtin_policies(registry: &mut PolicyRegistry) {
     // Only register the versioned implementations
-    registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1::BearerAuthPolicyFactory>();
+    registry.register_policy::<crate::policy::providers::bouncer::authentication::bearer::v1::BearerAuthPolicyFactory>();
+    registry.register_policy::<crate::policy::providers::bouncer::authorization::rbac::v1::RbacPolicyFactory>();
 
     // Add other built-in policies here
 }
@@ -261,5 +266,18 @@ fn register_builtin_policies(registry: &mut PolicyRegistry) {
 fn register_custom_policies(registry: &mut PolicyRegistry) {
     for register_fn in crate::get_custom_policies() {
         register_fn(registry);
+    }
+}
+
+// Clear all headers that start with x-bouncer-
+fn clear_bouncer_headers(headers: &mut axum::http::HeaderMap) {
+    let bouncer_headers: Vec<_> = headers
+        .iter()
+        .filter(|(name, _)| name.as_str().to_lowercase().starts_with("x-bouncer-"))
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    for name in bouncer_headers {
+        headers.remove(name);
     }
 }

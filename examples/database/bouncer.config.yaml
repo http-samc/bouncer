@@ -11,7 +11,12 @@ databases:
     max_connections: 5
     connection_timeout: 5
 
-"@bouncer/auth/bearer/v1":
+"@bouncer/authentication/bearer/v1":
   db_provider: "mysql"
   token_validation_query: "SELECT access_level as role FROM users WHERE clerkUuid = ?"
   realm: "api"
+
+"@bouncer/authorization/rbac/v1":
+  route_roles:
+    "/status": ["Free"]
+    "/core/*": ["Status"]

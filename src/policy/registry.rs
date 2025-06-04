@@ -7,7 +7,17 @@ use std::path::Path;
 use tracing;
 
 pub struct PolicyRegistry {
-    factories: HashMap<String, Box<dyn Fn(&serde_json::Value) -> futures::future::BoxFuture<'static, Result<Box<dyn Policy>, String>> + Send + Sync>>,
+    factories: HashMap<
+        String,
+        Box<
+            dyn Fn(
+                    &serde_json::Value,
+                )
+                    -> futures::future::BoxFuture<'static, Result<Box<dyn Policy>, String>>
+                + Send
+                + Sync,
+        >,
+    >,
     // Store loaded libraries to keep them in memory
     #[allow(dead_code)]
     loaded_libraries: Vec<Library>,
@@ -43,7 +53,12 @@ impl PolicyRegistry {
             Box::new(move |config| {
                 let parsed_config = match serde_json::from_value::<F::Config>(config.clone()) {
                     Ok(config) => config,
-                    Err(e) => return Box::pin(futures::future::ready(Err(format!("Failed to parse config: {}", e)))),
+                    Err(e) => {
+                        return Box::pin(futures::future::ready(Err(format!(
+                            "Failed to parse config: {}",
+                            e
+                        ))))
+                    }
                 };
 
                 Box::pin(async move {
@@ -138,14 +153,12 @@ impl PolicyRegistry {
         let mut policy_router = PolicyRouter::new();
 
         for policy_config in config {
-            let factory = self.factories
-                .get(&policy_config.provider)
-                .ok_or_else(|| {
-                    format!(
-                        "Policy not found for provider ID: {}",
-                        policy_config.provider
-                    )
-                })?;
+            let factory = self.factories.get(&policy_config.provider).ok_or_else(|| {
+                format!(
+                    "Policy not found for provider ID: {}",
+                    policy_config.provider
+                )
+            })?;
 
             let policy = factory(&policy_config.parameters).await?;
 
