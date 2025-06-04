@@ -1,7 +1,7 @@
-use serde::Deserialize;
-use std::{collections::HashMap, fs, path::Path, env};
 use serde::de::{self, Deserializer, Visitor};
+use serde::Deserialize;
 use std::fmt;
+use std::{collections::HashMap, env, fs, path::Path};
 
 // Custom deserializer for strings that might contain environment variable references
 fn deserialize_env_var<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -10,7 +10,7 @@ where
 {
     struct StringVisitor;
 
-    impl<'de> Visitor<'de> for StringVisitor {
+    impl Visitor<'_> for StringVisitor {
         type Value = String;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -213,26 +213,26 @@ fn process_env_vars(value: &mut serde_json::Value) {
 
 pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-    
+
     // First parse to Value to allow processing environment variables
-    let mut yaml_value: serde_yaml::Value = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
-    
+    let mut yaml_value: serde_yaml::Value =
+        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+
     // Process environment variables in the parsed YAML
     process_yaml_env_vars(&mut yaml_value);
-    
+
     // Convert back to string and parse to our Config struct
     let yaml_str = serde_yaml::to_string(&yaml_value)
         .map_err(|e| format!("Failed to serialize processed YAML: {}", e))?;
-    
+
     let yaml_map: serde_yaml::Mapping = serde_yaml::from_str(&yaml_str)
         .map_err(|e| format!("Failed to parse YAML into mapping: {}", e))?;
-    
+
     // Check if bouncer_version field is present
     if !yaml_map.contains_key("bouncer_version") {
         return Err("Missing required field 'bouncer_version'. Please specify a compatible version (e.g., '0.1.*')".to_string());
     }
-    
+
     let mut config: Config = serde_yaml::from_str(&yaml_str)
         .map_err(|e| format!("Failed to parse YAML into Config: {}", e))?;
 
@@ -240,7 +240,7 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config, String> {
     for (_, value) in config.policy_configs.iter_mut() {
         process_env_vars(value);
     }
-    
+
     // Process the policy configs to generate the policies array
     config.process_policy_configs();
 
@@ -276,20 +276,26 @@ pub fn validate_version(config_version: &str, current_version: &str) -> Result<(
     // Parse the current version
     let current_parts: Vec<&str> = current_version.split('.').collect();
     if current_parts.len() != 3 {
-        return Err(format!("Invalid current version format: {}", current_version));
+        return Err(format!(
+            "Invalid current version format: {}",
+            current_version
+        ));
     }
-    
+
     // Parse the config version, which may contain wildcards
     let config_parts: Vec<&str> = config_version.split('.').collect();
     if config_parts.len() != 3 {
         return Err(format!("Invalid config version format: {}", config_version));
     }
-    
+
     // Validate major version - must be explicitly specified
     if config_parts[0] == "*" {
-        return Err("Wildcard major version is not allowed. Use a specific major version number.".to_string());
+        return Err(
+            "Wildcard major version is not allowed. Use a specific major version number."
+                .to_string(),
+        );
     }
-    
+
     // Check if major versions match
     if config_parts[0] != current_parts[0] {
         return Err(format!(
@@ -297,7 +303,7 @@ pub fn validate_version(config_version: &str, current_version: &str) -> Result<(
             config_parts[0], current_parts[0]
         ));
     }
-    
+
     // Check minor version if not wildcard
     if config_parts[1] != "*" && config_parts[1] != current_parts[1] {
         return Err(format!(
@@ -305,16 +311,20 @@ pub fn validate_version(config_version: &str, current_version: &str) -> Result<(
             config_parts[0], config_parts[1], current_parts[0], current_parts[1], current_parts[2]
         ));
     }
-    
+
     // Check patch version if not wildcard
     if config_parts[2] != "*" && config_parts[2] != current_parts[2] {
         return Err(format!(
             "Patch version mismatch: config requires {}.{}.{}, but current is {}.{}.{}",
-            config_parts[0], config_parts[1], config_parts[2], 
-            current_parts[0], current_parts[1], current_parts[2]
+            config_parts[0],
+            config_parts[1],
+            config_parts[2],
+            current_parts[0],
+            current_parts[1],
+            current_parts[2]
         ));
     }
-    
+
     Ok(())
 }
 

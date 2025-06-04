@@ -1,0 +1,19 @@
+bouncer_version: 0.1.*
+
+server:
+  bind_address: 127.0.0.1
+  port: 8000
+  destination_address: "ENV.DESTINATION_URL"
+
+databases:
+  mysql:
+    connection_url: "ENV.MYSQL_URL"
+    max_connections: 5
+    connection_timeout: 5
+  redis:
+    connection_url: "ENV.REDIS_URL"
+
+"@bouncer/auth/bearer/v1-managed":
+  realm: "api"
+  token_key_prefix: "ENV.TOKEN_KEY_REPR"
+  token_key_salt: "ENV.TOKEN_KEY_SALT"

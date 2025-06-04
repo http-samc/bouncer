@@ -1,5 +1,6 @@
 use crate::policy::registry::PolicyRegistry;
 use crate::policy::PolicyChainExt;
+use crate::GLOBAL_CONFIG;
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use axum::Router;
@@ -10,7 +11,6 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use crate::GLOBAL_CONFIG;
 
 pub async fn start_server(config: crate::config::Config) {
     // Store config in global cell for access from policies
@@ -23,7 +23,9 @@ pub async fn start_server(config: crate::config::Config) {
         Ok(token) => token,
         Err(_) => {
             tracing::warn!("BOUNCER_TOKEN environment variable not set. This may make your target API vulnerable to impersonation.");
-            tracing::warn!("Using insecure default token 'secret'. Please set BOUNCER_TOKEN in production.");
+            tracing::warn!(
+                "Using insecure default token 'secret'. Please set BOUNCER_TOKEN in production."
+            );
             "secret".to_string()
         }
     };
@@ -48,7 +50,7 @@ pub async fn start_server(config: crate::config::Config) {
     }
 
     // Build policy chain based on config file
-    let policy_chain = registry
+    let (policy_chain, policy_router) = registry
         .build_policy_chain(&config.policies)
         .await
         .expect("Failed to build policy chain");
@@ -64,12 +66,27 @@ pub async fn start_server(config: crate::config::Config) {
 
     // Create Axum router with middleware for policies
     let app = Router::new()
+        // Add policy routes first
+        .merge(policy_router.into_router())
+        // Add catch-all route for forwarding (excluding /_admin paths)
         .route(
             "/{*path}",
-            axum::routing::any(move |req| {
+            axum::routing::any(move |req: Request<Body>| async move {
+                let path = req.uri().path();
+                tracing::debug!("Received request for path: {}", path);
+
+                // Don't forward /_admin paths
+                if path.starts_with("/_admin") {
+                    tracing::debug!("Path starts with /_admin, returning 404");
+                    return Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .body(Body::from("Not Found"))
+                        .unwrap();
+                }
+
                 // Clone the token for use in the handler
                 let token = bouncer_token.clone();
-                handler(req, client.clone(), config_for_handler.clone(), token)
+                handler(req, client.clone(), config_for_handler.clone(), token).await
             }),
         )
         .layer(policy_chain.into_layer());
@@ -124,12 +141,11 @@ async fn handler(
 
         tracing::info!("Forwarding to URL: {}", url);
 
-        // Extract headers and body from the request, filtering out bouncer-* headers
+        // Extract headers and body from the request
         let mut headers = reqwest::header::HeaderMap::new();
         for (name, value) in req.headers() {
-            // Skip any header starting with 'bouncer' (case/whitespace insensitive)
-            let header_str = name.as_str().to_lowercase();
-            if header_str.starts_with("bouncer") {
+            // Skip host header as we'll set it correctly
+            if name.as_str().to_lowercase() == "host" {
                 continue;
             }
 
@@ -138,6 +154,21 @@ async fn handler(
                     headers.insert(header_name, header_value);
                 }
             }
+        }
+
+        // Clear any bouncer headers
+        clear_bouncer_headers(&mut headers);
+
+        // Set the correct host header based on the destination URL
+        if let Ok(host_value) = reqwest::header::HeaderValue::from_str(
+            url.split("://")
+                .nth(1)
+                .unwrap_or("")
+                .split('/')
+                .next()
+                .unwrap_or(""),
+        ) {
+            headers.insert(reqwest::header::HOST, host_value);
         }
 
         // Add bouncer-token header with our token
@@ -178,6 +209,7 @@ async fn handler(
         let response = match proxy_request.headers(headers).send().await {
             Ok(res) => res,
             Err(e) => {
+                tracing::error!("Failed to forward request: {}", e);
                 return Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .body(Body::from(format!("Failed to forward request: {}", e)))
@@ -186,7 +218,6 @@ async fn handler(
         };
 
         // Convert the response back to an Axum response
-        // Convert reqwest::StatusCode to axum::http::StatusCode using its numeric value
         let status_code = StatusCode::from_u16(response.status().as_u16())
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let mut response_builder = Response::builder().status(status_code);
@@ -225,8 +256,9 @@ async fn handler(
 // Register built-in policies
 fn register_builtin_policies(registry: &mut PolicyRegistry) {
     // Only register the versioned implementations
-    registry.register_policy::<crate::policy::providers::bouncer::auth::bearer::v1::BearerAuthPolicyFactory>();
-    
+    registry.register_policy::<crate::policy::providers::bouncer::authentication::bearer::v1::BearerAuthPolicyFactory>();
+    registry.register_policy::<crate::policy::providers::bouncer::authorization::rbac::v1::RbacPolicyFactory>();
+
     // Add other built-in policies here
 }
 
@@ -234,5 +266,18 @@ fn register_builtin_policies(registry: &mut PolicyRegistry) {
 fn register_custom_policies(registry: &mut PolicyRegistry) {
     for register_fn in crate::get_custom_policies() {
         register_fn(registry);
+    }
+}
+
+// Clear all headers that start with x-bouncer-
+fn clear_bouncer_headers(headers: &mut axum::http::HeaderMap) {
+    let bouncer_headers: Vec<_> = headers
+        .iter()
+        .filter(|(name, _)| name.as_str().to_lowercase().starts_with("x-bouncer-"))
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    for name in bouncer_headers {
+        headers.remove(name);
     }
 }
