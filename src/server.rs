@@ -148,11 +148,23 @@ async fn handler(
                 continue;
             }
 
+            // Skip host header as we'll set it correctly
+            if header_str == "host" {
+                continue;
+            }
+
             if let Ok(header_name) = reqwest::header::HeaderName::try_from(name.as_str()) {
                 if let Ok(header_value) = reqwest::header::HeaderValue::try_from(value.as_bytes()) {
                     headers.insert(header_name, header_value);
                 }
             }
+        }
+
+        // Set the correct host header based on the destination URL
+        if let Ok(host_value) = reqwest::header::HeaderValue::from_str(
+            url.split("://").nth(1).unwrap_or("").split('/').next().unwrap_or("")
+        ) {
+            headers.insert(reqwest::header::HOST, host_value);
         }
 
         // Add bouncer-token header with our token
@@ -193,6 +205,7 @@ async fn handler(
         let response = match proxy_request.headers(headers).send().await {
             Ok(res) => res,
             Err(e) => {
+                tracing::error!("Failed to forward request: {}", e);
                 return Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .body(Body::from(format!("Failed to forward request: {}", e)))
@@ -201,7 +214,6 @@ async fn handler(
         };
 
         // Convert the response back to an Axum response
-        // Convert reqwest::StatusCode to axum::http::StatusCode using its numeric value
         let status_code = StatusCode::from_u16(response.status().as_u16())
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let mut response_builder = Response::builder().status(status_code);
