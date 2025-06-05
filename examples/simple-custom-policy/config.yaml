@@ -1,0 +1,10 @@
+server:
+  bind_address: 127.0.0.1
+  port: 8080
+
+policies:
+  - id: "my-rate-limiter"
+    provider: "rate-limiter"
+    parameters:
+      requests_per_minute: 60
+      burst: 10

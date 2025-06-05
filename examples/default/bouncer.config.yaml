@@ -1,0 +1,10 @@
+bouncer_version: 0.1.*
+
+server:
+  bind_address: 127.0.0.1
+  port: 8000
+  destination_address: "ENV.DESTINATION_URL"
+
+"@bouncer/auth/bearer/v1":
+  token: foo
+  realm: "api"

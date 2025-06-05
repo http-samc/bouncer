@@ -1,3 +1,6 @@
 /target
 .cargo-ok
 .DS_Store
+**/target/**
+.env
+examples/yaak/*

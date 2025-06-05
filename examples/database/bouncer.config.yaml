@@ -1,0 +1,22 @@
+bouncer_version: 0.1.*
+
+server:
+  bind_address: 127.0.0.1
+  port: 8000
+  destination_address: "ENV.DESTINATION_URL"
+
+databases:
+  mysql:
+    connection_url: "ENV.MYSQL_URL"
+    max_connections: 5
+    connection_timeout: 5
+
+"@bouncer/authentication/bearer/v1":
+  db_provider: "mysql"
+  token_validation_query: "SELECT access_level as role FROM users WHERE clerkUuid = ?"
+  realm: "api"
+
+"@bouncer/authorization/rbac/v1":
+  route_roles:
+    "/status": ["Free"]
+    "/core/*": ["Status"]
